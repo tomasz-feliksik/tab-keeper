@@ -128,6 +128,9 @@ Each of these cost real time:
   `--remote-debugging-port=0` and read `<user-data-dir>/DevToolsActivePort`.
 - **Chromium has service workers of its own.** Select the extension's worker by its ID, or a test attaches to a built-in
   one and reports nonsense.
+- **A debugger attached while a worker starts can stay useless.** It sees no `chrome`, or gets no answer, however long
+  it retries. Attach again until `chrome.runtime.id` answers. It only shows on a slow machine: pin to one CPU to
+  reproduce.
 - **Never find a process with `pkill -f` or `pgrep -f`.** The pattern also matches any shell whose command line mentions
   it, the one running the test included. `hostPid` in `tests/e2e/harness.mjs` matches on the process's environment.
 - **`--pack-extension` exits non-zero when it succeeds,** so check the file, and a Chromium helper can outlive it and

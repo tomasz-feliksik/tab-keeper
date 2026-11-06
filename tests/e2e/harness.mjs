@@ -25,6 +25,7 @@ const HOST_NAME = "io.github.tomasz_feliksik.tab_keeper";
 const EXTENSION_FILES = ["manifest.json", "background.js", "core.js", "options.html", "options.js"];
 const PATIENCE_MS = 30_000;
 const ANSWER_MS = 10_000;
+const PROBE_MS = 2_000;
 const STOP_MS = 10_000;
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -91,11 +92,11 @@ class Cdp {
     return new Cdp(socket);
   }
 
-  send(method, params = {}) {
+  send(method, params = {}, patienceMs = ANSWER_MS) {
     const id = ++this.sent;
     return new Promise((resolve, reject) => {
       // A worker that has gone never answers, and that must fail rather than hang.
-      const timer = setTimeout(() => reject(new Error(`no answer to ${method}`)), ANSWER_MS);
+      const timer = setTimeout(() => reject(new Error(`no answer to ${method}`)), patienceMs);
       timer.unref();
       this.waiting.set(id, { resolve, reject });
       this.socket.send(JSON.stringify({ id, method, params }));
@@ -154,20 +155,40 @@ export class Browser {
       () => readFileSync(join(this.userData, "DevToolsActivePort"), "utf8").split("\n")[0],
     );
     this.port = port;
-    this.worker = await eventually("the extension's service worker", async () => {
-      const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-      // Chromium has service workers of its own, so match on this extension's ID.
-      const target = targets.find(
-        (t) => t.type === "service_worker" && t.url.startsWith(`chrome-extension://${EXTENSION_ID}/`),
-      );
-      return target ? Cdp.open(target.webSocketDebuggerUrl) : null;
-    });
+    this.worker = await eventually("the extension's service worker", () => this.attachToWorker(port));
     try {
       await eventually("the host's socket", () => this.instanceSocket());
     } catch (error) {
       throw new Error(`${error.message}\nChromium's log:\n${readFileSync(this.log, "utf8").slice(-4000)}`);
     }
     return this;
+  }
+
+  /**
+   * A connection made while the worker is still starting can stay without extension APIs,
+   * or never answer, however long it is retried. So only a connection that has shown it
+   * can see `chrome.runtime` is kept. Seen on a slow machine, and on one CPU here.
+   */
+  async attachToWorker(port) {
+    const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+    // Chromium has service workers of its own, so match on this extension's ID.
+    const target = targets.find(
+      (t) => t.type === "service_worker" && t.url.startsWith(`chrome-extension://${EXTENSION_ID}/`),
+    );
+    if (!target) return null;
+    const worker = await Cdp.open(target.webSocketDebuggerUrl);
+    try {
+      const probe = await worker.send(
+        "Runtime.evaluate",
+        { expression: "globalThis.chrome?.runtime?.id", returnByValue: true },
+        PROBE_MS,
+      );
+      if (probe.result?.value === EXTENSION_ID) return worker;
+    } catch {
+      // It did not answer in time, which is the case this exists for.
+    }
+    worker.close();
+    return null;
   }
 
   async instance() {
