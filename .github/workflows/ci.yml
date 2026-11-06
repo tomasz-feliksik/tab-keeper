@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  format_check:
+    if: github.ref_name != '__dolt_remote_info__'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - run: nix develop --command just fmt-check
+
+  lint:
+    if: github.ref_name != '__dolt_remote_info__'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - run: nix develop --command just lint
+
+  release_check:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - run: nix develop --command just check-tag "$GITHUB_REF_NAME"
+
+  test:
+    if: github.ref_name != '__dolt_remote_info__'
+    runs-on: ubuntu-latest
+    # What ai-harness evaluates this flake with. A warning or import-from-derivation here
+    # would otherwise pass CI and fail only there. Spaces around `=` are required.
+    env:
+      NIX_CONFIG: |
+        abort-on-warn = true
+        allow-import-from-derivation = false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - run: nix develop --command just test
+      # Full logs: without them a failure shows its last 25 lines, which may not name the test.
+      - run: nix flake check --print-build-logs

@@ -4,3 +4,9 @@
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Build output
+target/
+mutants.out*/
+.direnv/
+result
