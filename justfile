@@ -51,7 +51,7 @@ vm-test:
 # Against real Chromium. Needs its own shell: nix develop .#e2e --command just e2e
 e2e *args:
     cargo build
-    node --test --test-concurrency=1 {{args}} tests/e2e/*.test.mjs
+    node --test --test-concurrency=1 --test-timeout=120000 {{args}} tests/e2e/*.test.mjs
 
 mutants *args:
     cargo mutants --jobs 8 --timeout 60 {{args}}

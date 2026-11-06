@@ -2,7 +2,17 @@
 // profiles. The traps this avoids are in docs/things-to-keep-in-mind.md, Testing traps.
 
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  mkdirSync,
+  openSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -14,6 +24,8 @@ export const EXTENSION_ID = "niglgkgdkfompjmcbpldgepicfnjlfnc";
 const HOST_NAME = "io.github.tomasz_feliksik.tab_keeper";
 const EXTENSION_FILES = ["manifest.json", "background.js", "core.js", "options.html", "options.js"];
 const PATIENCE_MS = 30_000;
+const ANSWER_MS = 10_000;
+const STOP_MS = 10_000;
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -82,6 +94,9 @@ class Cdp {
   send(method, params = {}) {
     const id = ++this.sent;
     return new Promise((resolve, reject) => {
+      // A worker that has gone never answers, and that must fail rather than hang.
+      const timer = setTimeout(() => reject(new Error(`no answer to ${method}`)), ANSWER_MS);
+      timer.unref();
       this.waiting.set(id, { resolve, reject });
       this.socket.send(JSON.stringify({ id, method, params }));
     });
@@ -97,6 +112,7 @@ export class Browser {
     this.world = world;
     this.directory = directory;
     this.userData = join(world.root, directory);
+    this.log = join(world.root, `${directory}.log`);
     mkdirSync(join(this.userData, "NativeMessagingHosts"), { recursive: true });
     writeFileSync(
       join(this.userData, "NativeMessagingHosts", `${HOST_NAME}.json`),
@@ -131,7 +147,7 @@ export class Browser {
         "--restore-last-session",
         "about:blank",
       ],
-      { env, stdio: "ignore" },
+      { env, stdio: ["ignore", "ignore", openSync(this.log, "a")] },
     );
     const port = await eventually(
       "the debugging port",
@@ -146,7 +162,11 @@ export class Browser {
       );
       return target ? Cdp.open(target.webSocketDebuggerUrl) : null;
     });
-    await eventually("the host's socket", () => this.instanceSocket());
+    try {
+      await eventually("the host's socket", () => this.instanceSocket());
+    } catch (error) {
+      throw new Error(`${error.message}\nChromium's log:\n${readFileSync(this.log, "utf8").slice(-4000)}`);
+    }
     return this;
   }
 
@@ -197,10 +217,14 @@ export class Browser {
 
   async stop() {
     this.worker?.close();
-    if (!this.process || this.process.exitCode !== null) return;
-    const exited = new Promise((resolve) => this.process.once("exit", resolve));
-    this.process.kill("SIGTERM");
+    // One killed by a signal has no exit code, and its exit event has already fired.
+    const { process: child } = this;
+    if (!child || child.exitCode !== null || child.signalCode !== null) return;
+    const exited = new Promise((resolve) => child.once("exit", resolve));
+    child.kill("SIGTERM");
+    const timer = setTimeout(() => child.kill("SIGKILL"), STOP_MS);
     await exited;
+    clearTimeout(timer);
   }
 }
 
