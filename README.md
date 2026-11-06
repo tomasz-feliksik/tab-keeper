@@ -2,8 +2,9 @@
 
 Lets people and agents list, close, group and arrange Chrome tabs across every profile.
 
-**Status: built, and tested on Chromium.** Every command and MCP tool exists and passes against real Chromium, and a
-fresh NixOS VM installs it from this flake. It has not yet been run on branded Chrome on a real machine.
+**Status: built, and tested on Chromium and on branded Chrome in a VM.** Every command and MCP tool exists and passes
+against real Chromium, and a fresh NixOS VM installs it from this flake and runs every kind of command on branded
+Chrome 156. It has not yet run on a real, long-lived machine.
 
 ## Why
 
@@ -57,6 +58,7 @@ nix develop --command just check   # lint and test: the CI entry point
 nix flake check                    # builds, Clippy, formatting, Home Manager module, extension
 nix develop .#e2e --command just e2e   # the guarantees against real Chromium
 just vm-test                       # the whole install on a fresh NixOS VM
+just vm-test-chrome                # the same on branded Chrome, with every kind of command
 ```
 
 Work is tracked with [beads](https://github.com/gastownhall/beads): run `bd ready` to see what can be done next.

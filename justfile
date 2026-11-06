@@ -48,6 +48,10 @@ pack:
 vm-test:
     nix build .#vm-test --print-build-logs
 
+# The same on branded Google Chrome, including the memory discard frees. Needs KVM.
+vm-test-chrome:
+    nix build .#vm-test-chrome --print-build-logs
+
 # Against real Chromium. Needs its own shell: nix develop .#e2e --command just e2e
 e2e *args:
     cargo build
