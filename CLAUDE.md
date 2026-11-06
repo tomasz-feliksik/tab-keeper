@@ -1,7 +1,7 @@
 # tab-keeper
 
 A Rust program and a Manifest V3 extension that let people and agents list, close, group and arrange Chrome tabs across
-profiles. Built and tested on Chromium, and on branded Chrome in a NixOS VM; a real, long-lived machine has not been verified.
+profiles. Built and tested on Chromium, and on branded Chrome in a NixOS VM; it is installed on one real machine and has not yet seen days of use.
 
 ## Start here
 

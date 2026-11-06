@@ -42,6 +42,10 @@
           Managed policy directories under /etc. Chrome has no per-user policy on Linux,
           so this reaches every OS user of the machine; a user without the native host
           from `homeModules.default` gets an extension that answers nothing.
+
+          Do not enable this when another file there sets `ExtensionSettings`. Chrome uses
+          one file's value for a policy, the lexically last, and uninstalls an extension
+          that stops being listed. Add this extension to that list instead (see the README).
         '';
       };
     };

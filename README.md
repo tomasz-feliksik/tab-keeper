@@ -4,7 +4,7 @@ Lets people and agents list, close, group and arrange Chrome tabs across every p
 
 **Status: built, and tested on Chromium and on branded Chrome in a VM.** Every command and MCP tool exists and passes
 against real Chromium, and a fresh NixOS VM installs it from this flake and runs every kind of command on branded
-Chrome 156. It has not yet run on a real, long-lived machine.
+Chrome 156. It is installed on one real machine with several running profiles, and has not yet seen days of use.
 
 ## Why
 
@@ -33,8 +33,22 @@ tabKeeper.extension.enable = true;
 imports = [inputs.tab-keeper.homeModules.default];
 ```
 
-Restart Chrome, then run `tab-keeper list`. To use it from an agent, register `tab-keeper mcp` as a stdio MCP server,
-and keep its write and destructive tools behind your harness's permission prompt.
+**If your configuration already sets `ExtensionSettings` in a Chrome policy file, do not use the NixOS module.** It
+writes that policy from a file of its own, Chrome uses only one file's value for a policy, and an extension that stops
+being listed gets uninstalled. Skip the module and add its entry to your existing list instead:
+
+```nix
+ExtensionSettings.${inputs.tab-keeper.lib.extensionId} = {
+  installation_mode = "normal_installed";
+  update_url = "file://${inputs.tab-keeper.packages.${pkgs.stdenv.hostPlatform.system}.extension}/updates.xml";
+  override_update_url = true;
+};
+```
+
+Then run `tab-keeper list`; a running Chrome picks the policy up without a restart. If a tool of yours allows every
+policy-installed extension in incognito, exclude this one, or agents will see those tabs. To use it from an agent,
+register `tab-keeper mcp` as a stdio MCP server, and keep its write and destructive tools behind your harness's
+permission prompt.
 
 Titles and URLs are written by websites, and tab-keeper hands them to your agent labelled as untrusted data. A page can
 still try to talk an agent into something, and the tab list can hold private URLs. **An agent that has this and a
