@@ -4,9 +4,10 @@ use serde_json::{Value, json};
 
 use super::closing::profile_for;
 use super::gather::{gather, parse_refs};
+use super::listing::{TITLE_CHARS, URL_CHARS};
 use super::results::{TabResult, resolve};
 use super::{Env, OpError, Report};
-use crate::display;
+use crate::display::{self, compact};
 use crate::saved::{Record, RecordKind};
 
 const MAX_DEPTH: usize = 64;
@@ -37,8 +38,8 @@ fn flatten(node: &Value, depth: usize, profile: &str, into: &mut Vec<Value>) {
         into.push(json!({
             "profile": profile,
             "id": node["id"],
-            "title": node["title"],
-            "url": node["url"],
+            "title": node["title"].as_str().map(|title| compact(title, TITLE_CHARS).0),
+            "url": node["url"].as_str().map(|url| compact(url, URL_CHARS).0),
             "depth": depth - 1,
             "folder": node["url"].is_null(),
         }));

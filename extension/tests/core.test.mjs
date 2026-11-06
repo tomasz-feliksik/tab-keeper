@@ -544,3 +544,14 @@ test("a tab still loading is listed and addressed by the URL it is loading", asy
   const closed = await answer({ id: 2, op: "close", targets: [{ id: 1, url: "https://example.com/" }] });
   assert.equal(closed.result.results[0].status, "done");
 });
+
+test("removing a bookmark folder removes what is in it, as the real API needs asking", async () => {
+  const chrome = fakeChrome();
+  const folder = await chrome.bookmarks.create({ title: "folder" });
+  await chrome.bookmarks.create({ title: "inside", url: "https://example.com/", parentId: folder.id });
+
+  const removed = await createAnswerer(chrome)({ id: 1, op: "bookmarks_remove", nodeId: folder.id });
+
+  assert.equal(removed.ok, true, removed.error);
+  assert.deepEqual(removed.result, { removed: folder.id });
+});

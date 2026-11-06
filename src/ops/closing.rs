@@ -5,11 +5,12 @@ use std::collections::BTreeMap;
 use serde_json::{Value, json};
 
 use super::gather::{Gathered, LiveProfile, gather, parse_refs};
+use super::listing::{TITLE_CHARS, URL_CHARS};
 use super::results::{
     TabResult, all_failed, failed_profile_lines, pair_results, resolve, summarize, targets,
 };
 use super::{Env, OpError, Report};
-use crate::display;
+use crate::display::{self, compact};
 use crate::saved::{Record, RecordKind, SavedGroup, SavedTab};
 use crate::tabs::{NO_GROUP, Tab};
 
@@ -184,8 +185,8 @@ pub fn reopen(env: &Env, gathered: &Gathered, mut record: Record) -> Result<Repo
                 .unwrap_or_else(
                     || json!({"status": "failed", "reason": "no_result_from_extension"}),
                 );
-            result["url"] = json!(tab.url);
-            result["title"] = json!(tab.title);
+            result["url"] = json!(compact(&tab.url, URL_CHARS).0);
+            result["title"] = json!(compact(&tab.title, TITLE_CHARS).0);
             result
         })
         .collect();
@@ -249,7 +250,7 @@ pub fn list_saved(env: &Env, limit: usize, offset: usize) -> Result<Report, OpEr
             json!({
                 "id": record.id,
                 "kind": record.kind,
-                "name": record.name,
+                "name": record.name.as_deref().map(|name| compact(name, TITLE_CHARS).0),
                 "profile": record.profile,
                 "created_ms": record.created_ms,
                 "restored_ms": record.restored_ms,

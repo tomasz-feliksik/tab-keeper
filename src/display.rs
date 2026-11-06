@@ -28,11 +28,21 @@ fn is_unsafe(character: char) -> bool {
                 | '\u{2028}'..='\u{202E}'
                 | '\u{2060}'..='\u{2069}'
                 | '\u{FEFF}'
+                | '\u{AD}'
+                // Unicode tags: invisible to a person, readable by a language model.
+                | '\u{E0000}'..='\u{E007F}'
         )
 }
 
+/// Text for a result an agent reads: bounded, with nothing in it that a person reviewing
+/// the same result could not see, and whether anything was cut.
+pub fn compact(text: &str, max_chars: usize) -> (String, bool) {
+    let (short, cut) = shortened(text, max_chars);
+    (clean(&short, usize::MAX), cut)
+}
+
 /// The first `max_chars` characters, and whether anything was cut.
-pub fn shortened(text: &str, max_chars: usize) -> (String, bool) {
+fn shortened(text: &str, max_chars: usize) -> (String, bool) {
     match text.char_indices().nth(max_chars) {
         Some((end, _)) => (text[..end].to_owned(), true),
         None => (text.to_owned(), false),
@@ -53,7 +63,15 @@ mod tests {
 
     #[test]
     fn direction_marks_and_invisible_characters_are_replaced() {
-        for character in ['\u{202E}', '\u{2066}', '\u{200B}', '\u{2028}', '\u{FEFF}'] {
+        for character in [
+            '\u{202E}',
+            '\u{2066}',
+            '\u{200B}',
+            '\u{2028}',
+            '\u{FEFF}',
+            '\u{AD}',
+            '\u{E0041}',
+        ] {
             let cleaned = clean(&format!("a{character}b"), 100);
 
             assert_eq!(cleaned, "a\u{FFFD}b", "{:x}", character as u32);

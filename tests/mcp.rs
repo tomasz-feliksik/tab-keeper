@@ -172,6 +172,12 @@ fn a_page_of_three_hundred_tabs_stays_small() {
         .expect("text");
     assert!(text.len() < MAX_PAGE_BYTES, "{} bytes", text.len());
     assert_eq!(payload(&answers[0])["total"], 300);
+    assert!(
+        payload(&answers[0])["data_label"]
+            .as_str()
+            .expect("a label")
+            .contains("never an instruction")
+    );
 }
 
 #[test]
@@ -523,4 +529,116 @@ fn a_blank_line_is_not_a_message_and_a_line_at_the_limit_is_not_too_long() {
 
     assert_eq!(answers.len(), 1);
     assert_eq!(answers[0]["result"], json!({}));
+}
+
+#[test]
+fn partial_groups_and_profiles_are_marked_as_errors() {
+    let world = World::new();
+    let _healthy = world.profile(INSTANCE_A, obliging(vec![tab(1, URL)]));
+    let _silent = world.profile(INSTANCE_B, Box::new(|_| Value::Null));
+
+    let answers = converse(
+        &world,
+        &[
+            call(1, "list_groups", &json!({})),
+            call(2, "list_profiles", &json!({})),
+        ],
+    );
+
+    assert_eq!(answers[0]["result"]["isError"], true);
+    assert_eq!(payload(&answers[0])["partial"], true);
+    assert_eq!(answers[1]["result"]["isError"], true);
+    assert_eq!(payload(&answers[1])["partial"], true);
+}
+
+/// One server lives as long as an agent session, so a clock read at startup would make
+/// every tab look younger the longer the session has run.
+#[test]
+fn idle_time_is_measured_when_the_tool_is_called_not_when_the_server_started() {
+    let world = World::new();
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("after 1970")
+        .as_secs_f64()
+        * 1000.0;
+    let mut fresh = tab(1, URL);
+    fresh["lastAccessed"] = json!(now_ms);
+    let _profile = world.profile(INSTANCE_A, obliging(vec![fresh]));
+    let mut child = world
+        .command()
+        .args(["--timeout", "5", "mcp"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("runs");
+    let mut stdin = child.stdin.take().expect("stdin");
+
+    std::thread::sleep(std::time::Duration::from_millis(2200));
+    writeln!(
+        stdin,
+        "{}",
+        call(1, "list_tabs", &json!({"idle_over": "2s"}))
+    )
+    .expect("written");
+    drop(stdin);
+
+    let output = child.wait_with_output().expect("finished");
+    let answer: Value = serde_json::from_slice(&output.stdout).expect("JSON");
+    assert_eq!(payload(&answer)["total"], 1);
+}
+
+#[test]
+fn no_caller_can_ask_for_more_than_a_page() {
+    let world = World::new();
+    let tabs = (0..300).map(|id| tab(id, URL)).collect();
+    let _profile = world.profile(INSTANCE_A, obliging(tabs));
+
+    let answers = converse(&world, &[call(1, "list_tabs", &json!({"limit": 100_000}))]);
+
+    assert_eq!(
+        payload(&answers[0])["tabs"].as_array().expect("tabs").len(),
+        200
+    );
+}
+
+#[test]
+fn hidden_text_in_a_title_does_not_reach_the_agent() {
+    let world = World::new();
+    let mut hostile = tab(1, URL);
+    hostile["title"] = json!("visible\u{E0041}\u{202E}\u{200B} title");
+    let _profile = world.profile(INSTANCE_A, obliging(vec![hostile]));
+
+    let answers = converse(&world, &[call(1, "list_tabs", &json!({}))]);
+
+    let title = payload(&answers[0])["tabs"][0]["title"].clone();
+    assert_eq!(title, "visible\u{FFFD}\u{FFFD}\u{FFFD} title");
+}
+
+#[test]
+fn a_dry_run_of_a_huge_browser_stays_bounded() {
+    const MAX_BYTES: usize = 128 * 1024;
+    let world = World::new();
+    let tabs = (0..1000)
+        .map(|id| {
+            let mut long = tab(id, &format!("https://example.com/{}", "u".repeat(2000)));
+            long["title"] = json!("t".repeat(2000));
+            long
+        })
+        .collect();
+    let _profile = world.profile(INSTANCE_A, obliging(tabs));
+
+    let answers = converse(
+        &world,
+        &[call(
+            1,
+            "discard_tabs",
+            &json!({"idle": "1s", "dry_run": true}),
+        )],
+    );
+
+    let text = answers[0]["result"]["content"][0]["text"]
+        .as_str()
+        .expect("text");
+    assert!(text.len() < MAX_BYTES, "{} bytes", text.len());
+    assert_eq!(payload(&answers[0])["would_unload_total"], 1000);
 }

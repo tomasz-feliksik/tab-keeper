@@ -298,4 +298,20 @@ mod tests {
             Err(PolicyError::Unreadable { .. })
         ));
     }
+
+    #[test]
+    fn a_directory_that_cannot_be_read_refuses_even_when_another_sets_the_list() {
+        use std::os::unix::fs::PermissionsExt;
+        let readable = policy_dir(&[("a.json", r#"{"TabDiscardingExceptions": ["a.test"]}"#)]);
+        let closed = policy_dir(&[]);
+        fs::set_permissions(closed.path(), fs::Permissions::from_mode(0o000)).expect("closed");
+
+        let result = read_exceptions(&[readable.path().to_path_buf(), closed.path().to_path_buf()]);
+
+        fs::set_permissions(closed.path(), fs::Permissions::from_mode(0o700)).expect("opened");
+        assert!(
+            matches!(result, Err(PolicyError::Unreadable { .. })),
+            "{result:?}"
+        );
+    }
 }

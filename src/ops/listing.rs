@@ -6,13 +6,13 @@ use serde_json::json;
 use super::gather::{Gathered, LiveProfile, gather};
 use super::results::failed_profile_lines;
 use super::{Env, OpError, Report};
-use crate::display::{self, shortened};
+use crate::display::{self, compact};
 use crate::tabs::{NO_GROUP, Tab, TabRef, url_host};
 
 pub const DEFAULT_LIMIT: usize = 50;
 pub const MAX_LIMIT: usize = 1000;
-const TITLE_CHARS: usize = 120;
-const URL_CHARS: usize = 200;
+pub const TITLE_CHARS: usize = 120;
+pub const URL_CHARS: usize = 200;
 const HUMAN_TITLE_CHARS: usize = 70;
 
 #[derive(Clone, Debug, Default)]
@@ -87,12 +87,12 @@ fn entry(profile: &LiveProfile, tab: &Tab, full: bool, now_ms: u64) -> TabEntry 
     let (title, title_cut) = if full {
         (tab.title.clone(), false)
     } else {
-        shortened(&tab.title, TITLE_CHARS)
+        compact(&tab.title, TITLE_CHARS)
     };
     let (url, url_cut) = if full {
         (tab.url.clone(), false)
     } else {
-        shortened(&tab.url, URL_CHARS)
+        compact(&tab.url, URL_CHARS)
     };
     let group = (tab.group_id != NO_GROUP)
         .then(|| {
@@ -291,7 +291,7 @@ pub fn list_groups(env: &Env, profile: Option<&str>) -> Result<Report, OpError> 
                     "profile": p.name.name,
                     "id": group.id,
                     "window": group.window_id,
-                    "title": group.title,
+                    "title": compact(&group.title, TITLE_CHARS).0,
                     "color": group.color,
                     "collapsed": group.collapsed,
                     "tabs": p.snapshot.tabs.iter().filter(|t| t.group_id == group.id).count(),

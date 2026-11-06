@@ -5,9 +5,10 @@ use serde_json::{Value, json};
 
 use super::closing::{record_for, reopen, settle_record};
 use super::gather::gather;
+use super::listing::TITLE_CHARS;
 use super::results::{TabResult, all_failed, pair_results, summarize, targets};
 use super::{Env, OpError, Report};
-use crate::display;
+use crate::display::{self, compact};
 use crate::saved::{Record, RecordKind, Store};
 use crate::tabs::Tab;
 
@@ -88,10 +89,10 @@ pub fn list_groups_saved(env: &Env) -> Result<Report, OpError> {
         .filter(|record| record.kind == RecordKind::Group)
         .map(|record| {
             json!({
-                "name": record.name,
+                "name": record.name.as_deref().map(|name| compact(name, TITLE_CHARS).0),
                 "profile": record.profile,
                 "tabs": record.tabs.len(),
-                "title": record.groups.first().map(|group| group.title.as_str()),
+                "title": record.groups.first().map(|group| compact(&group.title, TITLE_CHARS).0),
                 "color": record.groups.first().map(|group| group.color.as_str()),
                 "created_ms": record.created_ms,
             })

@@ -122,7 +122,11 @@ export function fakeChrome(initialTabs = []) {
         siblings.splice(index ?? siblings.length, 0, node);
         return node;
       },
-      remove: async (id) => dropNode(id),
+      // Measured behaviour of the real API: `remove` refuses a folder that holds anything.
+      remove: async (id) => {
+        if ((subtree(id).children ?? []).length > 0) throw new Error("Can't remove non-empty folder");
+        dropNode(id);
+      },
       removeTree: async (id) => dropNode(id),
     },
   };

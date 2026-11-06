@@ -145,16 +145,11 @@ impl Store {
 
     fn ready_directory(&self) -> Result<&Path, SavedError> {
         let directory = &self.directory;
-        match DirBuilder::new()
+        DirBuilder::new()
             .recursive(true)
             .mode(PRIVATE_DIRECTORY)
             .create(directory)
-        {
-            Err(error) if error.kind() != ErrorKind::AlreadyExists => {
-                return Err(Self::file_error(directory)(error));
-            }
-            _ => {}
-        }
+            .map_err(Self::file_error(directory))?;
         let metadata = fs::symlink_metadata(directory).map_err(Self::file_error(directory))?;
         let private =
             metadata.is_dir() && metadata.permissions().mode() & 0o7777 == PRIVATE_DIRECTORY;
@@ -175,7 +170,7 @@ impl Store {
         let outcome = write_durably(&temporary, record)
             .and_then(|()| fs::rename(&temporary, &path))
             .and_then(|()| File::open(directory)?.sync_all());
-        if outcome.is_err() && temporary.exists() {
+        if outcome.is_err() {
             // Best effort: the failed write is what gets reported, and a leftover dotfile
             // is ignored by `list`.
             fs::remove_file(&temporary).ok();
@@ -457,5 +452,30 @@ mod tests {
             state_home(None, None),
             Err(SavedError::NoStateDir)
         ));
+    }
+
+    #[test]
+    fn a_record_the_store_may_not_read_is_an_error_rather_than_missing() {
+        use std::os::unix::fs::PermissionsExt;
+        let (state, store) = store();
+        let saved = record(5);
+        store.write(&saved).expect("written");
+        let directory = state.path().join(DIRECTORY);
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o000)).expect("closed");
+
+        let load = store.load(&saved.id);
+        let list = store.list();
+        let delete = store.delete(&saved.id);
+
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).expect("opened");
+        assert!(
+            !matches!(load, Err(SavedError::NotFound(_)) | Ok(_)),
+            "{load:?}"
+        );
+        assert!(list.is_err(), "{list:?}");
+        assert!(
+            !matches!(delete, Err(SavedError::NotFound(_)) | Ok(())),
+            "{delete:?}"
+        );
     }
 }

@@ -6,16 +6,18 @@ use std::path::PathBuf;
 use serde_json::json;
 
 use super::gather::{Gathered, LiveProfile, gather, parse_refs};
+use super::listing::{TITLE_CHARS, URL_CHARS};
 use super::results::{
     TabResult, all_failed, failed_profile_lines, pair_results, resolve, summarize, targets,
 };
 use super::{Env, OpError, Report};
-use crate::display;
+use crate::display::{self, compact};
 use crate::policy::{Exceptions, read_exceptions};
 use crate::tabs::{Tab, TabRef};
 
 const DAY_MS: u64 = 86_400_000;
 const HUMAN_TITLE_CHARS: usize = 70;
+const MAX_DRY_RUN_ENTRIES: usize = 200;
 
 #[derive(Clone, Debug, Default)]
 pub struct DiscardOptions {
@@ -176,9 +178,15 @@ fn dry_run_report(
                 display::clean(&reference, 120),
                 display::clean(&tab.title, HUMAN_TITLE_CHARS)
             ));
-            would.push(json!({"ref": reference, "title": tab.title, "url": tab.url}));
+            would.push(json!({
+                "ref": reference,
+                "title": compact(&tab.title, TITLE_CHARS).0,
+                "url": compact(&tab.url, URL_CHARS).0,
+            }));
         }
     }
+    let would_total = would.len();
+    would.truncate(MAX_DRY_RUN_ENTRIES);
     for (reason, count) in kept {
         lines.push(format!("kept {count}: {reason}"));
     }
@@ -190,6 +198,7 @@ fn dry_run_report(
             "partial": !gathered.failed.is_empty(),
             "failed": gathered.failed,
             "would_unload": would,
+            "would_unload_total": would_total,
             "kept": kept,
             "results": refused,
         }),

@@ -279,7 +279,20 @@ mod tests {
     fn an_extension_id_cannot_name_another_path() {
         let browser = browser_with(&[("Default", INSTANCE_A)]);
 
-        let found = known_profiles(&[browser.path().to_path_buf()], "../../../../etc");
+        // A real directory, reachable from the settings directory by this "ID".
+        let elsewhere = browser.path().join("Default").join("elsewhere");
+        fs::create_dir_all(&elsewhere).expect("a directory");
+        let id = "../elsewhere";
+        assert!(
+            browser
+                .path()
+                .join("Default")
+                .join(SETTINGS_DIRECTORY)
+                .join(id)
+                .is_dir()
+        );
+
+        let found = known_profiles(&[browser.path().to_path_buf()], id);
 
         assert_eq!(found, []);
     }
@@ -292,6 +305,21 @@ mod tests {
             &[browser.path().to_path_buf()],
             "ponmlkjihgfedcbaponmlkjihgfedcba",
         );
+
+        assert_eq!(found, []);
+    }
+
+    #[test]
+    fn an_id_of_the_right_letters_and_the_wrong_length_is_not_one() {
+        let browser = browser_with(&[("Default", INSTANCE_A)]);
+        let settings = browser
+            .path()
+            .join("Default")
+            .join(SETTINGS_DIRECTORY)
+            .join("abc");
+        fs::create_dir_all(settings).expect("a directory");
+
+        let found = known_profiles(&[browser.path().to_path_buf()], "abc");
 
         assert_eq!(found, []);
     }

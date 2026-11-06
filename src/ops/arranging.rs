@@ -136,14 +136,16 @@ pub fn group(env: &Env, options: &GroupOptions) -> Result<Report, OpError> {
 /// Windows that lost every tab to this group, which Chrome closes.
 fn emptied_windows(profile: &LiveProfile, results: &[TabResult]) -> Vec<i64> {
     let window_of = |result: &TabResult, key: &str| result.details.get(key).and_then(Value::as_i64);
-    let moved: Vec<i64> = results
+    let moved: Vec<&TabResult> = results
         .iter()
         .filter(|r| r.is_done() && window_of(r, "fromWindowId") != window_of(r, "windowId"))
+        .collect();
+    let ids: Vec<i64> = moved
+        .iter()
         .filter_map(|r| TabRef::parse(&r.reference).map(|reference| reference.id))
         .collect();
-    let from: BTreeSet<i64> = results
+    let from: BTreeSet<i64> = moved
         .iter()
-        .filter(|r| r.is_done() && window_of(r, "fromWindowId") != window_of(r, "windowId"))
         .filter_map(|r| window_of(r, "fromWindowId"))
         .collect();
     from.into_iter()
@@ -153,7 +155,7 @@ fn emptied_windows(profile: &LiveProfile, results: &[TabResult]) -> Vec<i64> {
                 .tabs
                 .iter()
                 .filter(|tab| tab.window_id == *window)
-                .all(|tab| moved.contains(&tab.id))
+                .all(|tab| ids.contains(&tab.id))
         })
         .collect()
 }

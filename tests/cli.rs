@@ -557,6 +557,7 @@ fn a_restore_goes_to_the_records_own_profile_with_everything_saved() {
     assert_eq!(requests[0]["tabs"][0]["url"], URL);
     assert_eq!(requests[0]["tabs"][0]["pinned"], true);
     assert_eq!(requests[0]["tabs"][0]["index"], 1);
+    assert_eq!(requests[0]["tabs"][0]["group"], Value::Null);
     assert_eq!(other.requests_for("restore"), Vec::<Value>::new());
 }
 
@@ -1395,4 +1396,130 @@ fn a_name_is_found_only_among_saved_groups() {
         answer_json(&world.run(&["group", "list"]))["groups"],
         json!([])
     );
+}
+
+#[test]
+fn a_profile_that_takes_too_long_is_reported_as_taking_too_long() {
+    let world = World::new();
+    let _slow = world.profile(
+        INSTANCE_A,
+        Box::new(|_| {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            Value::Null
+        }),
+    );
+
+    let output = world
+        .command()
+        .args(["--json", "--timeout", "1", "list"])
+        .output()
+        .expect("runs");
+
+    assert_eq!(exit_code(&output), PARTIAL);
+    assert!(
+        answer_json(&output)["failed"][0]["error"]
+            .as_str()
+            .expect("an error")
+            .contains("in time")
+    );
+}
+
+#[test]
+fn a_tab_in_a_profile_that_did_not_answer_is_not_called_disconnected() {
+    let world = World::new();
+    let first = world.profile(INSTANCE_A, obliging(vec![tab(1, URL)]));
+    let reference = refs_of(&world).remove(0);
+    drop(first);
+    fs::remove_file(world.socket_dir().join(format!("{INSTANCE_A}.sock"))).expect("removed");
+    let _silent = world.profile(INSTANCE_A, Box::new(|_| Value::Null));
+
+    let output = world.run(&["close", &reference]);
+
+    assert_eq!(exit_code(&output), PARTIAL);
+    assert_eq!(
+        answer_json(&output)["results"][0]["reason"],
+        "profile_did_not_answer"
+    );
+    assert_eq!(saved_files(&world), Vec::<String>::new());
+}
+
+#[test]
+fn a_short_list_has_no_next_page_and_leaves_out_flags_that_are_off() {
+    let world = World::new();
+    let _profile = world.profile(INSTANCE_A, obliging(vec![tab(1, URL)]));
+
+    let answer = answer_json(&world.run(&["list"]));
+
+    assert_eq!(answer["next_offset"], Value::Null);
+    for flag in ["active", "pinned", "audible", "discarded", "truncated"] {
+        assert_eq!(answer["tabs"][0].get(flag), None, "{flag}");
+    }
+}
+
+#[test]
+fn profiles_lists_who_answers_and_fails_when_one_does_not() {
+    let world = World::new();
+    let _healthy = world.profile(INSTANCE_A, obliging(vec![tab(1, URL), tab(2, URL)]));
+
+    let output = world.run(&["profiles"]);
+    assert_eq!(exit_code(&output), 0);
+    assert_eq!(answer_json(&output)["partial"], false);
+    assert_eq!(answer_json(&output)["profiles"][0]["tabs"], 2);
+
+    let _silent = world.profile(INSTANCE_B, Box::new(|_| Value::Null));
+    let output = world.run(&["profiles"]);
+    assert_eq!(exit_code(&output), PARTIAL);
+    assert_eq!(answer_json(&output)["partial"], true);
+}
+
+#[test]
+fn every_tab_bookmarked_at_once_is_complete() {
+    let world = World::new();
+    let tabs = vec![tab(1, URL), tab(2, URL)];
+    let profile = world.profile(
+        INSTANCE_A,
+        Box::new(move |request| {
+            if request["op"] == "bookmarks_add" {
+                return json!({"id": request["id"], "ok": true, "result": {"folderId": "9", "results": [
+                    {"status": "done", "bookmarkId": "6"},
+                    {"status": "done", "bookmarkId": "7"},
+                ]}});
+            }
+            answer_obligingly(request, &tabs)
+        }),
+    );
+    let refs = refs_of(&world);
+
+    let output = world.run(&["bookmark", "add", &refs[0], &refs[1], "--folder", "kept"]);
+
+    assert_eq!(exit_code(&output), 0);
+    let request = &profile.requests_for("bookmarks_add")[0];
+    assert_eq!(request["items"].as_array().expect("items").len(), 2);
+    assert_eq!(request["folder"], "kept");
+}
+
+#[test]
+fn when_nothing_answers_an_operation_on_one_profile_says_so() {
+    let world = World::new();
+    let _silent = world.profile(INSTANCE_A, Box::new(|_| Value::Null));
+
+    let output = world.run(&["bookmark", "add", "--title", "t", "--url", URL]);
+
+    assert_eq!(exit_code(&output), ERROR);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("no profile is connected"));
+}
+
+#[test]
+fn the_saved_list_marks_what_was_already_restored() {
+    let world = World::new();
+    let _profile = world.profile(INSTANCE_A, opening_handler(vec![tab(1, URL)]));
+    let record = closed_record(&world);
+
+    let before = world.command().args(["saved"]).output().expect("runs");
+    assert!(!String::from_utf8_lossy(&before.stdout).contains("(restored)"));
+
+    world.run(&["restore", &record]);
+
+    let after = world.command().args(["saved"]).output().expect("runs");
+    assert!(String::from_utf8_lossy(&after.stdout).contains("(restored)"));
 }
