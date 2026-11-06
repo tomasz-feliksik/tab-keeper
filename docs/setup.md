@@ -74,7 +74,13 @@ Then import `inputs.tab-keeper.homeModules.default` into a Home Manager configur
 host, and `inputs.tab-keeper.nixosModules.default` into the NixOS one with `tabKeeper.extension.enable = true`, because
 Chrome policy is machine-wide. Check with `chrome://policy` that the policy was accepted, never by reading the file.
 
-## 5. Signing the extension
+## 5. The end-to-end tests
+
+`just e2e` runs in CI on every push. It costs a 2.2 GiB download of Playwright's Chromium, once per runner, and about 11
+seconds for the tests, and it is the only place that catches what Chrome itself adjusts or refuses. It lives in its own
+dev shell so that nothing else pays for that download. `just vm-test` needs KVM and is run on purpose.
+
+## 6. Signing the extension
 
 Needs an age identity the key is encrypted to, either your own or `SOPS_AGE_KEY`. Run this after any change to the
 extension's files, and commit the result:
