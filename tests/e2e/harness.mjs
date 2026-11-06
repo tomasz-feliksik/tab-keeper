@@ -14,7 +14,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -159,9 +158,18 @@ export class Browser {
     try {
       await eventually("the host's socket", () => this.instanceSocket());
     } catch (error) {
-      throw new Error(`${error.message}\nChromium's log:\n${readFileSync(this.log, "utf8").slice(-4000)}`);
+      throw new Error(`${error.message}\nChromium's log:\n${this.logWithoutNoise()}`);
     }
     return this;
+  }
+
+  /** Without a session bus Chromium logs thousands of bytes of D-Bus errors, burying the host's. */
+  logWithoutNoise() {
+    return readFileSync(this.log, "utf8")
+      .split("\n")
+      .filter((line) => !/dbus\/|GLib-GIO|valid types|^\s*$/.test(line))
+      .join("\n")
+      .slice(-4000);
   }
 
   /**
@@ -251,8 +259,9 @@ export class Browser {
 
 export class World {
   constructor() {
-    // A socket path has to fit about 108 bytes, so this is short on purpose.
-    this.root = mkdtempSync(join(tmpdir(), "tk"));
+    // A socket path has to fit about 108 bytes, so this is short on purpose. Not tmpdir():
+    // it follows TMPDIR, which `nix develop` sets to a long path on a CI runner.
+    this.root = mkdtempSync("/tmp/tk");
     this.runtime = join(this.root, "run");
     this.state = join(this.root, "state");
     this.socketDirectory = join(this.runtime, "tab-keeper");
