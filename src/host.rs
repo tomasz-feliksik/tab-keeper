@@ -33,7 +33,7 @@ use crate::frame::{
 /// from spinning.
 const ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(100);
 
-const INSTANCE_LEN: usize = 32;
+pub const INSTANCE_LEN: usize = 32;
 
 /// How long the relay waits on the things that can stall it.
 #[derive(Clone, Copy, Debug)]
@@ -115,16 +115,24 @@ pub struct InstanceId(String);
 
 impl InstanceId {
     fn parse(value: String) -> Option<Self> {
-        let valid = value.len() == INSTANCE_LEN
-            && value
-                .bytes()
-                .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'));
-        valid.then_some(Self(value))
+        is_instance_id(&value).then_some(Self(value))
     }
 
     fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+pub fn is_instance_id(value: &str) -> bool {
+    value.len() == INSTANCE_LEN
+        && value
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// The socket directory, if there is one yet, as long as it is private.
+pub fn existing_socket_directory(runtime_dir: &Path) -> Result<Option<PathBuf>, HostError> {
+    socket::existing_private_directory(runtime_dir)
 }
 
 #[derive(Deserialize)]

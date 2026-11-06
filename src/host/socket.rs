@@ -84,12 +84,29 @@ fn private_directory(runtime_dir: &Path) -> Result<PathBuf, HostError> {
         _ => {}
     }
     let metadata = fs::symlink_metadata(&directory).map_err(socket_error)?;
-    let private = metadata.is_dir() && metadata.permissions().mode() & 0o7777 == PRIVATE_MODE;
-    if private {
+    if is_private(&metadata) {
         Ok(directory)
     } else {
         Err(HostError::UnsafeDirectory(directory))
     }
+}
+
+/// For clients, which must not create the directory: `None` means no host has run.
+pub fn existing_private_directory(runtime_dir: &Path) -> Result<Option<PathBuf>, HostError> {
+    let directory = runtime_dir.join(SOCKET_DIRECTORY);
+    match fs::symlink_metadata(&directory) {
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(HostError::Socket {
+            path: directory,
+            source,
+        }),
+        Ok(metadata) if is_private(&metadata) => Ok(Some(directory)),
+        Ok(_) => Err(HostError::UnsafeDirectory(directory)),
+    }
+}
+
+fn is_private(metadata: &fs::Metadata) -> bool {
+    metadata.is_dir() && metadata.permissions().mode() & 0o7777 == PRIVATE_MODE
 }
 
 fn refuse_anything_but_a_socket(path: &Path) -> Result<(), HostError> {
