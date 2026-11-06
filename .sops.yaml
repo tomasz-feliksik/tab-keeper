@@ -1,0 +1,7 @@
+# The extension's signing key is encrypted to two recipients. Neither private half is
+# here: one is the maintainer's, the other is the GitHub Actions secret TAB_KEEPER_SOPS_AGE_KEY.
+creation_rules:
+  - path_regex: ^extension/signing-key\.sops\.json$
+    age: >-
+      age1ajyvh4k2h8z5sqfj4rccz9lu0gkkgackwpm5p2kk0w5jp02mxf7q5rrsme,
+      age1s2gyfjjh37s5a3qg426u0hr8ywj3725h08j5c747373xdnvrsalqukuaq4

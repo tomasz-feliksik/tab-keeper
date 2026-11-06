@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "tab-keeper",
+  "description": "Lets the local tab-keeper program list and arrange tabs in this profile. It cannot read pages.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "121",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArA3LFvvu2uTuBwgMVi8YcLpspisHwI7g0fZpsZOXuWFzl8lPYZ2qNwGzq4JRuZBRCoqTU1yYDce30hNvOHqlB6VJE6JZ/VDrtZ7ZusrhNjobJXUyKS9AVKfFDi9esQy026+cBP6JSPpJxKtCoVbEqpYP36gZ8z5eerdRbsUIlRgvcYKl7geNSVzRo7f7+fbM2ysAxP8cjHwYow3eYzXnvV+wwNHfRAdjTtmWqIHXLZIKzb0LWpNXrgY4f2lZO4yFDZaUrAON2acZC4UflO6p3j16dmrihGqUQ2hbdsZObKeCIjjKRzddxe5boSbeexIRFOMiyO96hmLUoLvAtiVV3QIDAQAB",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_page": "options.html",
+  "permissions": ["alarms", "bookmarks", "nativeMessaging", "storage", "tabGroups", "tabs"]
+}

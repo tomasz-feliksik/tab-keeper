@@ -43,16 +43,20 @@ Git pushes do not carry the tracker, so finishing a session takes two pushes: `b
 
 ## 3. The structure
 
-| Path                    | What it is                                                                          |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| `flake.nix`             | Inputs and one line of outputs: every file under `modules/` is a flake-parts module |
-| `modules/parts.nix`     | Supported systems and imported flake modules                                        |
-| `modules/package.nix`   | The crate through crane and the fenix `stable` toolchain, Clippy check, dev shell   |
-| `modules/formatter.nix` | One formatting entry point, `nix fmt`: alejandra, rustfmt, prettier                 |
-| `modules/home.nix`      | `homeModules.default` and a check that it puts a working command on `PATH`          |
-| `justfile`              | The recipes CI and people both run                                                  |
-| `.github/workflows/`    | `format_check`, `lint`, `release_check`, `test`, with actions pinned by commit      |
-| `reference/prototype/`  | The frozen prototype. Excluded from formatting and linting, deleted after the port  |
+| Path                         | What it is                                                                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `flake.nix`                  | Inputs and one line of outputs: every file under `modules/` is a flake-parts module                                              |
+| `modules/parts.nix`          | Supported systems and imported flake modules                                                                                     |
+| `modules/package.nix`        | The crate through crane and the fenix `stable` toolchain, Clippy check, dev shells                                               |
+| `modules/formatter.nix`      | One formatting entry point, `nix fmt`: alejandra, rustfmt, prettier                                                              |
+| `modules/home.nix`           | `homeModules.default` and a check that it puts a working command on `PATH`                                                       |
+| `justfile`                   | The recipes CI and people both run                                                                                               |
+| `.github/workflows/`         | Format, lint, test, e2e, and signing on `main` and tags, with actions pinned                                                     |
+| `modules/extension.nix`      | The signed extension, its update manifest, `nixosModules.default` and their checks                                               |
+| `modules/vm-test.nix`        | The whole install on a fresh NixOS VM, run on purpose with `just vm-test`                                                        |
+| `modules/vm-test-chrome.nix` | The same on branded Chrome (unfree, x86_64 only), with every kind of command and the memory discard frees: `just vm-test-chrome` |
+| `extension/`                 | The extension's source, `pack.sh`, the signed package and the encrypted key                                                      |
+| `tests/e2e/`                 | The guarantees against real Chromium, in the `e2e` dev shell                                                                     |
 
 `.beads/`, `.agents/`, `AGENTS.md` and `CLAUDE.md` are excluded from formatting because `bd` regenerates parts of them.
 
@@ -67,5 +71,25 @@ Git pushes do not carry the tracker, so finishing a session takes two pushes: `b
 }
 ```
 
-Then import `inputs.tab-keeper.homeModules.default` into a Home Manager configuration. For now this only installs the
-command. The extension policy needs a NixOS module, because Chrome policy is machine-wide. Both are part of M1.
+Then import `inputs.tab-keeper.homeModules.default` into a Home Manager configuration, for the command and the native
+host, and `inputs.tab-keeper.nixosModules.default` into the NixOS one with `tabKeeper.extension.enable = true`, because
+Chrome policy is machine-wide. Check with `chrome://policy` that the policy was accepted, never by reading the file.
+
+## 5. The end-to-end tests
+
+`just e2e` runs in CI on every push. It costs a 2.2 GiB download of Playwright's Chromium, once per runner, and about 11
+seconds for the tests, and it is the only place that catches what Chrome itself adjusts or refuses. It lives in its own
+dev shell so that nothing else pays for that download. `just vm-test` needs KVM and is run on purpose.
+
+## 6. Signing the extension
+
+Needs an age identity the key is encrypted to, either your own or `SOPS_AGE_KEY`. Run this after any change to the
+extension's files, and commit the result:
+
+```bash
+nix develop .#e2e --command just pack
+```
+
+The first pack was bootstrapped once, by generating the key, encrypting it with `sops` under the rule in `.sops.yaml`,
+and putting its public half in the manifest's `key`. That never needs repeating: replacing the key changes the extension
+ID.
