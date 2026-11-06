@@ -153,7 +153,8 @@ async function discardTabs(chrome, request) {
   return forEachTarget(chrome, request, PROTECTIONS, async (tab) => {
     if (tab.discarded) throw new Error("already discarded");
     const discarded = await chrome.tabs.discard(tab.id);
-    return { discarded: discarded?.discarded ?? true };
+    // Branded Chrome replaces the ID here, and Chromium does not.
+    return { discarded: discarded?.discarded ?? true, tabId: discarded?.id ?? tab.id };
   });
 }
 

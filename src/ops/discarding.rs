@@ -18,6 +18,7 @@ use crate::tabs::{Tab, TabRef};
 const DAY_MS: u64 = 86_400_000;
 const HUMAN_TITLE_CHARS: usize = 70;
 const MAX_DRY_RUN_ENTRIES: usize = 200;
+const REF_CHARS: usize = 120;
 
 #[derive(Clone, Debug, Default)]
 pub struct DiscardOptions {
@@ -138,13 +139,18 @@ pub fn discard(env: &Env, options: &DiscardOptions) -> Result<Report, OpError> {
         }
         let request = json!({"op": "discard", "targets": targets(tabs), "allow": options.allow});
         match profile.ask(env, &request) {
-            Ok(answer) => results.extend(pair_results(profile, tabs, &answer)),
+            Ok(answer) => results.extend(with_new_refs(
+                profile,
+                tabs,
+                pair_results(profile, tabs, &answer),
+            )),
             Err(error) => results.extend(all_failed(profile, tabs, &error.to_string())),
         }
     }
 
     let complete = gathered.failed.is_empty() && results.iter().all(TabResult::is_done);
     let mut human = vec![summarize("unloaded", &results)];
+    human.extend(results.iter().filter_map(replaced_line));
     human.extend(failed_profile_lines(&gathered));
     Ok(Report {
         value: json!({
@@ -154,6 +160,38 @@ pub fn discard(env: &Env, options: &DiscardOptions) -> Result<Report, OpError> {
         }),
         human: human.join("\n"),
         complete,
+    })
+}
+
+/// Branded Chrome gives a discarded tab a new ID, which leaves the reference that asked
+/// for it naming nothing, so every unloaded tab's answer says what names it now.
+fn with_new_refs(profile: &LiveProfile, tabs: &[&Tab], results: Vec<TabResult>) -> Vec<TabResult> {
+    tabs.iter()
+        .zip(results)
+        .map(|(tab, mut result)| {
+            let id = result.details.remove("tabId").and_then(|id| id.as_i64());
+            if let (true, Some(id)) = (result.is_done(), id) {
+                let new_ref = TabRef {
+                    id,
+                    ..TabRef::of(&profile.name.name, tab)
+                };
+                result
+                    .details
+                    .insert("new_ref".to_owned(), json!(new_ref.to_string()));
+            }
+            result
+        })
+        .collect()
+}
+
+fn replaced_line(result: &TabResult) -> Option<String> {
+    let new_ref = result.details.get("new_ref")?.as_str()?;
+    (new_ref != result.reference).then(|| {
+        format!(
+            "  {} is now {}",
+            display::clean(&result.reference, REF_CHARS),
+            display::clean(new_ref, REF_CHARS),
+        )
     })
 }
 

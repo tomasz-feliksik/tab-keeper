@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 use support::{
-    INSTANCE_A, INSTANCE_B, World, answer_json, answer_obligingly, exit_code, make_read_only,
-    obliging, tab,
+    FakeProfile, INSTANCE_A, INSTANCE_B, World, answer_json, answer_obligingly, exit_code,
+    make_read_only, obliging, tab,
 };
 
 const URL: &str = "https://example.com/page";
@@ -270,6 +270,128 @@ fn a_named_tab_in_the_exceptions_policy_is_refused_too() {
         "policy_exempt"
     );
     assert_eq!(profile.requests_for("discard"), Vec::<Value>::new());
+}
+
+/// Branded Chrome 156 gives a discarded tab a new ID, so the reference used to ask no longer
+/// names it. Answers as that browser does.
+fn profile_that_replaces_tab_one_with_77(world: &World) -> FakeProfile {
+    let tabs = vec![tab(1, URL)];
+    world.profile(
+        INSTANCE_A,
+        Box::new(move |request| {
+            if request["op"] == "discard" {
+                let result = json!({"results": [
+                    {"id": 1, "status": "done", "discarded": true, "tabId": 77},
+                ]});
+                json!({"id": request["id"], "ok": true, "result": result})
+            } else {
+                answer_obligingly(request, &tabs)
+            }
+        }),
+    )
+}
+
+#[test]
+fn discard_names_a_tab_by_the_id_chrome_gave_it() {
+    let world = World::new();
+    let _profile = profile_that_replaces_tab_one_with_77(&world);
+    let reference = refs_of(&world).remove(0);
+    let policy = world.policy_dir();
+
+    let output = world.run(&[
+        "discard",
+        &reference,
+        "--policy-dir",
+        policy.to_str().expect("utf-8"),
+    ]);
+
+    let result = &answer_json(&output)["results"][0];
+    assert_eq!(result["ref"], reference.as_str());
+    assert_eq!(result["new_ref"], reference.replace(":1:", ":77:").as_str());
+    assert!(result.get("tabId").is_none(), "{result}");
+}
+
+#[test]
+fn discard_tells_a_person_when_a_reference_stopped_working() {
+    let world = World::new();
+    let _profile = profile_that_replaces_tab_one_with_77(&world);
+    let reference = refs_of(&world).remove(0);
+    let policy = world.policy_dir();
+
+    let output = world
+        .command()
+        .args(["discard", &reference, "--policy-dir"])
+        .arg(&policy)
+        .output()
+        .expect("the binary runs");
+
+    let printed = String::from_utf8_lossy(&output.stdout);
+    let expected = format!("{reference} is now {}", reference.replace(":1:", ":77:"));
+    assert!(printed.contains(&expected), "{printed}");
+}
+
+#[test]
+fn discard_keeps_quiet_about_a_tab_that_kept_its_id() {
+    let world = World::new();
+    let _profile = world.profile(
+        INSTANCE_A,
+        Box::new(|request| {
+            let tabs = [tab(1, URL)];
+            if request["op"] == "discard" {
+                let result = json!({"results": [
+                    {"id": 1, "status": "done", "discarded": true, "tabId": 1},
+                ]});
+                json!({"id": request["id"], "ok": true, "result": result})
+            } else {
+                answer_obligingly(request, &tabs)
+            }
+        }),
+    );
+    let reference = refs_of(&world).remove(0);
+    let policy = world.policy_dir();
+
+    let output = world
+        .command()
+        .args(["discard", &reference, "--policy-dir"])
+        .arg(&policy)
+        .output()
+        .expect("the binary runs");
+
+    let printed = String::from_utf8_lossy(&output.stdout);
+    assert!(!printed.contains("is now"), "{printed}");
+}
+
+#[test]
+fn a_failed_discard_offers_no_new_reference() {
+    let world = World::new();
+    let tabs = vec![tab(1, URL)];
+    let _profile = world.profile(
+        INSTANCE_A,
+        Box::new(move |request| {
+            if request["op"] == "discard" {
+                let result = json!({"results": [
+                    {"id": 1, "status": "failed", "reason": "no", "tabId": 77},
+                ]});
+                json!({"id": request["id"], "ok": true, "result": result})
+            } else {
+                answer_obligingly(request, &tabs)
+            }
+        }),
+    );
+    let reference = refs_of(&world).remove(0);
+    let policy = world.policy_dir();
+
+    let output = world.run(&[
+        "discard",
+        &reference,
+        "--policy-dir",
+        policy.to_str().expect("utf-8"),
+    ]);
+
+    let result = &answer_json(&output)["results"][0];
+    assert_eq!(result["status"], "failed");
+    assert!(result.get("new_ref").is_none(), "{result}");
+    assert!(result.get("tabId").is_none(), "{result}");
 }
 
 #[test]

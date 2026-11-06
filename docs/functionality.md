@@ -1,14 +1,17 @@
 # Functionality
 
-What tab-keeper does and promises. Everything here is built and tested against Chromium. It has not yet been run on
-branded Chrome on a real machine, or from a real agent harness. Names and flags may change before a first release; the
-guarantees should not.
+What tab-keeper does and promises. Everything here is built and tested against Chromium, and every kind of command has
+run on branded Chrome in a NixOS VM. It has not yet run on a real, long-lived machine. Names and flags may change before
+a first release; the guarantees should not.
 
 ## Addressing a tab
 
 Chrome's tab IDs are only meaningful inside one profile and one browser session, so a bare ID is not enough. Every
 operation that changes a tab takes the profile, the tab ID and the URL the caller believes is there. If the URL no
 longer matches, that tab is refused and reported. This is how a plan made from a list that is now stale fails safely.
+
+Discarding can give a tab a new ID, as branded Chrome does. `discard` therefore answers each unloaded tab with a
+`new_ref`, and a person sees `old is now new`. The old reference names nothing from then on and fails as `gone`.
 
 ## Commands
 

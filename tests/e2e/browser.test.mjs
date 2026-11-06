@@ -91,6 +91,7 @@ test("discard unloads an idle tab, keeps it in the strip, and spares what is pro
 
   const { status, json } = world.cli("discard", await world.refFor(idle), "--policy-dir", world.policy);
   assert.equal(status, 0, JSON.stringify(json));
+  assert.equal(json.results[0].new_ref, await world.refFor(idle), "the answer names the tab as it is now");
 
   const tabs = await browser.tabs();
   const unloaded = tabs.find((tab) => tab.url === idle);

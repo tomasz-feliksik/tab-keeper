@@ -219,6 +219,15 @@ describe("discard", () => {
     assert.equal(result.status, "failed");
     assert.deepEqual(chrome.calls, []);
   });
+
+  test("reports the ID Chrome gave the tab, because branded Chrome replaces it", async () => {
+    const chrome = fakeChrome([{ id: 1 }]);
+    chrome.tabs.discard = async () => ({ id: 99, discarded: true });
+    const [result] = await results(chrome, { op: "discard", targets: [target({ id: 1 })] });
+    assert.equal(result.status, "done");
+    assert.equal(result.id, 1, "the result still answers the target that was asked about");
+    assert.equal(result.tabId, 99);
+  });
 });
 
 describe("move", () => {

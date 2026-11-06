@@ -182,7 +182,7 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "discard_tabs",
         effect: Effect::Write,
-        summary: "Unload tabs to free memory; they stay in the tab strip. Give tabs, or idle.",
+        summary: "Unload tabs to free memory; they stay in the tab strip. Give tabs, or idle. Chrome may give an unloaded tab a new ID: use new_ref from the result to act on it afterwards.",
         properties: discard_properties,
         required: &[],
     },
