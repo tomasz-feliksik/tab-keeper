@@ -44,13 +44,21 @@ async function capabilityEnabled(chrome, capability) {
   return capabilities?.[capability] !== false;
 }
 
+/**
+ * A tab that is still loading reports its address only as `pendingUrl`, and `url` is
+ * empty. Saving the empty one would lose the tab, so every read of a URL comes here.
+ */
+function urlOf(tab) {
+  return tab.url || tab.pendingUrl || "";
+}
+
 function compactTab(tab) {
   return {
     id: tab.id,
     windowId: tab.windowId,
     index: tab.index,
     title: tab.title ?? "",
-    url: tab.url ?? "",
+    url: urlOf(tab),
     active: tab.active,
     pinned: tab.pinned,
     audible: tab.audible ?? false,
@@ -112,7 +120,7 @@ async function resolveTarget(chrome, target, protections, allow) {
   } catch {
     return { refusal: refused(target, "gone") };
   }
-  if ((tab.url ?? "") !== target.url) return { refusal: refused(target, "url_changed") };
+  if (urlOf(tab) !== target.url) return { refusal: refused(target, "url_changed") };
   for (const protection of protections) {
     if (tab[protection] && !allow.includes(protection)) {
       return { refusal: refused(target, protection) };

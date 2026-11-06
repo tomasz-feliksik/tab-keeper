@@ -40,5 +40,11 @@
     devShells.default = pkgs.mkShell {
       packages = [toolchain] ++ (with pkgs; [just cargo-deny cargo-audit cargo-mutants git markdownlint-cli2 nodejs]);
     };
+    # Separate because Playwright's Chromium is a large download nothing else needs.
+    devShells.e2e = pkgs.mkShell {
+      inputsFrom = [self'.devShells.default];
+      packages = [pkgs.sops];
+      PLAYWRIGHT_BROWSERS_PATH = pkgs.playwright-driver.browsers;
+    };
   };
 }

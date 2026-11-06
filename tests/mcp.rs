@@ -249,3 +249,278 @@ fn without_a_readable_policy_the_discard_tool_touches_nothing() {
     assert_eq!(answers[0]["result"]["isError"], true);
     assert_eq!(profile.ops(), Vec::<String>::new());
 }
+
+/// Every tool reaches the operation it names, with its arguments.
+#[test]
+fn each_write_tool_sends_its_own_operation() {
+    let world = World::new();
+    let tabs = vec![tab(1, URL)];
+    let handler = move |request: &Value| {
+        let result = match request["op"].as_str() {
+            Some("restore") => json!({
+                "results": [{"position": 0, "status": "done", "id": 7}],
+                "groupProblems": [],
+            }),
+            Some("bookmarks_list") => json!({"tree": [{"id": "5", "title": "t", "url": URL}]}),
+            Some("bookmarks_add") => json!({"results": [{"status": "done", "bookmarkId": "6"}]}),
+            Some("bookmarks_remove") => json!({"removed": "5"}),
+            _ => return support::answer_obligingly(request, &tabs),
+        };
+        json!({"id": request["id"], "ok": true, "result": result})
+    };
+    let profile = world.profile(INSTANCE_A, Box::new(handler));
+    let listed = converse(&world, &[call(1, "list_tabs", &json!({}))]);
+    let reference = payload(&listed[0])["tabs"][0]["ref"].clone();
+    let cases = [
+        (
+            "move_tabs",
+            json!({"tabs": [reference], "index": 0, "window": 4}),
+            "move",
+        ),
+        (
+            "group_tabs",
+            json!({"tabs": [reference], "title": "t", "color": "red"}),
+            "group",
+        ),
+        ("ungroup_tabs", json!({"tabs": [reference]}), "ungroup"),
+        (
+            "discard_tabs",
+            json!({"tabs": [reference], "allow": ["pinned"]}),
+            "discard",
+        ),
+        ("list_bookmarks", json!({"limit": 1}), "bookmarks_list"),
+        (
+            "add_bookmark",
+            json!({"title": "t", "url": URL}),
+            "bookmarks_add",
+        ),
+        ("remove_bookmark", json!({"id": "5"}), "bookmarks_remove"),
+    ];
+    for (name, arguments, op) in cases {
+        let answers = converse(&world, &[call(1, name, &arguments)]);
+        assert_eq!(
+            answers[0]["result"]["isError"], false,
+            "{name}: {}",
+            answers[0]
+        );
+        assert_eq!(profile.requests_for(op).len(), 1, "{name}");
+    }
+    assert_eq!(profile.requests_for("move")[0]["windowId"], 4);
+    assert_eq!(profile.requests_for("group")[0]["color"], "red");
+    assert_eq!(
+        profile.requests_for("discard")[0]["allow"],
+        json!(["pinned"])
+    );
+}
+
+#[test]
+fn reading_tools_answer_and_filters_arrive() {
+    let world = World::new();
+    let tabs = vec![tab(1, URL), tab(2, "https://other.test/")];
+    let _profile = world.profile(INSTANCE_A, obliging(tabs));
+
+    let answers = converse(
+        &world,
+        &[
+            call(1, "list_profiles", &json!({})),
+            call(2, "list_groups", &json!({})),
+            call(3, "list_saved", &json!({})),
+            call(4, "list_saved_groups", &json!({})),
+            call(5, "list_tabs", &json!({"host": "other.test"})),
+            call(6, "list_tabs", &json!({"search": "other"})),
+            call(7, "list_tabs", &json!({"limit": 1, "offset": 1})),
+            call(8, "list_tabs", &json!({"idle_over": "1s"})),
+            call(9, "list_tabs", &json!({"idle_over": "soon"})),
+            call(10, "list_tabs", &json!({"profile": "nobody"})),
+        ],
+    );
+
+    assert_eq!(payload(&answers[0])["profiles"][0]["tabs"], 2);
+    assert_eq!(payload(&answers[1])["groups"], json!([]));
+    assert_eq!(payload(&answers[2])["records"], json!([]));
+    assert_eq!(payload(&answers[3])["groups"], json!([]));
+    assert_eq!(payload(&answers[4])["total"], 1);
+    assert_eq!(payload(&answers[5])["total"], 1);
+    assert_eq!(
+        payload(&answers[6])["tabs"][0]["url"],
+        "https://other.test/"
+    );
+    assert_eq!(payload(&answers[6])["limit"], 1);
+    assert_eq!(payload(&answers[7])["total"], 2);
+    assert_eq!(answers[8]["result"]["isError"], true);
+    assert_eq!(answers[9]["result"]["isError"], true);
+}
+
+#[test]
+fn a_saved_group_can_be_saved_listed_and_opened() {
+    let world = World::new();
+    let mut grouped = tab(1, URL);
+    grouped["groupId"] = json!(77);
+    let handler = move |request: &Value| {
+        let result = match request["op"].as_str() {
+            Some("list") => json!({
+                "extensionId": "niglgkgdkfompjmcbpldgepicfnjlfnc",
+                "tabs": [grouped.clone()],
+                "groups": [{"id": 77, "windowId": 1, "title": "work", "color": "red", "collapsed": false}],
+            }),
+            Some("restore") => json!({
+                "results": [{"position": 0, "status": "done", "id": 8}],
+                "groupProblems": [],
+            }),
+            _ => return support::answer_obligingly(request, &[]),
+        };
+        json!({"id": request["id"], "ok": true, "result": result})
+    };
+    let profile = world.profile(INSTANCE_A, Box::new(handler));
+
+    let answers = converse(
+        &world,
+        &[
+            call(1, "save_group", &json!({"name": "later", "group": "work"})),
+            call(2, "list_saved_groups", &json!({})),
+            call(3, "open_saved_group", &json!({"name": "later"})),
+            call(4, "save_group", &json!({"name": "later"})),
+            call(5, "open_saved_group", &json!({})),
+        ],
+    );
+
+    assert_eq!(answers[0]["result"]["isError"], false, "{}", answers[0]);
+    assert_eq!(payload(&answers[1])["groups"][0]["name"], "later");
+    assert_eq!(answers[2]["result"]["isError"], false, "{}", answers[2]);
+    assert_eq!(profile.requests_for("restore").len(), 1);
+    assert_eq!(answers[3]["result"]["isError"], true);
+    assert_eq!(answers[4]["result"]["isError"], true);
+}
+
+#[test]
+fn a_record_closed_through_the_server_comes_back_through_it() {
+    let world = World::new();
+    let tabs = vec![tab(1, URL)];
+    let handler = move |request: &Value| {
+        if request["op"] == "restore" {
+            return json!({"id": request["id"], "ok": true, "result": {
+                "results": [{"position": 0, "status": "done", "id": 7}],
+                "groupProblems": [],
+            }});
+        }
+        support::answer_obligingly(request, &tabs)
+    };
+    let profile = world.profile(INSTANCE_A, Box::new(handler));
+    let listed = converse(&world, &[call(1, "list_tabs", &json!({}))]);
+    let reference = payload(&listed[0])["tabs"][0]["ref"].clone();
+    let closed = converse(
+        &world,
+        &[call(2, "close_tabs", &json!({"tabs": [reference]}))],
+    );
+    let record = payload(&closed[0])["records"][0].clone();
+
+    let answers = converse(
+        &world,
+        &[
+            call(3, "list_saved", &json!({"limit": 5})),
+            call(4, "restore_saved", &json!({"record": record})),
+            call(5, "restore_saved", &json!({"record": record})),
+            call(
+                6,
+                "restore_saved",
+                &json!({"record": record, "again": true}),
+            ),
+            call(7, "restore_saved", &json!({})),
+        ],
+    );
+
+    assert_eq!(payload(&answers[0])["total"], 1);
+    assert_eq!(answers[1]["result"]["isError"], false);
+    assert_eq!(answers[2]["result"]["isError"], true);
+    assert_eq!(answers[3]["result"]["isError"], false);
+    assert_eq!(answers[4]["result"]["isError"], true);
+    assert_eq!(profile.requests_for("restore").len(), 2);
+}
+
+/// A harness validates arguments against these, so an empty schema would mean no checks.
+#[test]
+fn every_schema_names_the_arguments_its_tool_reads() {
+    let world = World::new();
+    let answers = converse(&world, &[request(1, "tools/list", &json!({}))]);
+    let tools = answers[0]["result"]["tools"].as_array().expect("tools");
+    let expected: &[(&str, &[&str])] = &[
+        ("list_profiles", &[]),
+        (
+            "list_tabs",
+            &["profile", "limit", "offset", "host", "search", "idle_over"],
+        ),
+        ("list_groups", &["profile"]),
+        ("list_saved", &["limit", "offset"]),
+        (
+            "discard_tabs",
+            &["tabs", "idle", "profile", "dry_run", "allow"],
+        ),
+        ("move_tabs", &["tabs", "window", "index"]),
+        ("group_tabs", &["tabs", "title", "color", "allow"]),
+        ("ungroup_tabs", &["tabs"]),
+        ("restore_saved", &["record", "again"]),
+        ("close_tabs", &["tabs", "allow"]),
+        ("list_bookmarks", &["profile", "limit", "offset"]),
+        (
+            "add_bookmark",
+            &["tabs", "title", "url", "folder", "parent", "profile"],
+        ),
+        ("remove_bookmark", &["id", "profile"]),
+        ("list_saved_groups", &[]),
+        ("save_group", &["name", "group", "profile", "allow"]),
+        ("open_saved_group", &["name"]),
+    ];
+    for (name, properties) in expected {
+        let tool = tools
+            .iter()
+            .find(|tool| tool["name"] == *name)
+            .expect("listed");
+        let mut found: Vec<&str> = tool["inputSchema"]["properties"]
+            .as_object()
+            .expect("properties")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        found.sort_unstable();
+        let mut wanted = properties.to_vec();
+        wanted.sort_unstable();
+        assert_eq!(found, wanted, "{name}");
+    }
+    let close = tools
+        .iter()
+        .find(|tool| tool["name"] == "close_tabs")
+        .expect("listed");
+    assert_eq!(close["inputSchema"]["properties"]["tabs"]["type"], "array");
+    assert_eq!(
+        close["inputSchema"]["properties"]["allow"]["items"]["enum"][0],
+        "active"
+    );
+}
+
+#[test]
+fn a_blank_line_is_not_a_message_and_a_line_at_the_limit_is_not_too_long() {
+    let world = World::new();
+    let mut child = world
+        .command()
+        .args(["mcp"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("runs");
+    {
+        let mut stdin = child.stdin.take().expect("stdin");
+        writeln!(stdin).expect("written");
+        let ping = request(1, "ping", &json!({})).to_string();
+        // A newline ends this exactly at the limit, padded with insignificant spaces.
+        writeln!(stdin, "{ping}{}", " ".repeat((1 << 20) - ping.len() - 1)).expect("written");
+    }
+    let output = child.wait_with_output().expect("finished");
+    let answers: Vec<Value> = String::from_utf8(output.stdout)
+        .expect("utf-8")
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("JSON"))
+        .collect();
+
+    assert_eq!(answers.len(), 1);
+    assert_eq!(answers[0]["result"], json!({}));
+}

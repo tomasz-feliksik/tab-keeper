@@ -533,3 +533,14 @@ describe("bookmarks", () => {
     assert.equal(restored.children[0].url, "https://a/");
   });
 });
+
+test("a tab still loading is listed and addressed by the URL it is loading", async () => {
+  const chrome = fakeChrome([{ id: 1, url: "", pendingUrl: "https://example.com/" }]);
+  const answer = createAnswerer(chrome);
+
+  const listed = await answer({ id: 1, op: "list" });
+  assert.equal(listed.result.tabs[0].url, "https://example.com/");
+
+  const closed = await answer({ id: 2, op: "close", targets: [{ id: 1, url: "https://example.com/" }] });
+  assert.equal(closed.result.results[0].status, "done");
+});

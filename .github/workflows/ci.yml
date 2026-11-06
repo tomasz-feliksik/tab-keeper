@@ -48,3 +48,30 @@ jobs:
       - run: nix develop --command just test
       # Full logs: without them a failure shows its last 25 lines, which may not name the test.
       - run: nix flake check --print-build-logs
+
+  e2e:
+    if: github.ref_name != '__dolt_remote_info__'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - run: nix develop .#e2e --command just e2e
+
+  # The one job that holds the signing key, so it never runs on a branch's code. Packing is
+  # deterministic, so this proves the committed package is what this key makes of this source.
+  package_extension:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    needs: [format_check, lint, test, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - run: nix develop .#e2e --command just pack
+        env:
+          SOPS_AGE_KEY: ${{ secrets.TAB_KEEPER_SOPS_AGE_KEY }}
+      - run: git diff --exit-code -- extension/tab-keeper.crx
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tab-keeper-extension
+          path: extension/tab-keeper.crx
+          if-no-files-found: error

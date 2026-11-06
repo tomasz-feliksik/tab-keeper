@@ -949,3 +949,450 @@ fn a_group_that_does_not_exist_closes_nothing() {
     assert_eq!(exit_code(&output), ERROR);
     assert_eq!(profile.requests_for("close"), Vec::<Value>::new());
 }
+
+// What mutation testing found unguarded
+
+fn hours_ago(hours: f64) -> Value {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("after 1970")
+        .as_secs_f64()
+        * 1000.0;
+    json!(now - hours * 3_600_000.0)
+}
+
+#[test]
+fn idle_is_measured_from_now_against_the_threshold() {
+    let world = World::new();
+    let tabs = vec![
+        with(tab(1, URL), "lastAccessed", hours_ago(3.0)),
+        with(tab(2, URL), "lastAccessed", hours_ago(1.0)),
+    ];
+
+    let requests = discard_requests_after(&world, tabs, &["--idle", "2h"]);
+
+    assert_eq!(discarded_ids(&requests), [1]);
+}
+
+#[test]
+fn a_dry_run_counts_why_each_tab_was_kept() {
+    let world = World::new();
+    let tabs = vec![
+        with(tab(1, URL), "pinned", json!(true)),
+        with(tab(2, URL), "pinned", json!(true)),
+        with(tab(3, URL), "active", json!(true)),
+    ];
+    let _profile = world.profile(INSTANCE_A, obliging(tabs));
+    let policy = world.policy_dir();
+
+    let answer = answer_json(&world.run(&[
+        "discard",
+        "--idle",
+        "1s",
+        "--dry-run",
+        "--policy-dir",
+        policy.to_str().expect("utf-8"),
+    ]));
+
+    assert_eq!(answer["kept"], json!({"pinned": 2, "active": 1}));
+}
+
+#[test]
+fn a_dry_run_is_partial_when_a_profile_could_not_be_asked() {
+    let world = World::new();
+    let _healthy = world.profile(INSTANCE_A, obliging(vec![tab(1, URL)]));
+    let _silent = world.profile(INSTANCE_B, Box::new(|_| Value::Null));
+    let policy = world.policy_dir();
+
+    let output = world.run(&[
+        "discard",
+        "--idle",
+        "1s",
+        "--dry-run",
+        "--policy-dir",
+        policy.to_str().expect("utf-8"),
+    ]);
+
+    assert_eq!(exit_code(&output), PARTIAL);
+    assert_eq!(answer_json(&output)["partial"], true);
+}
+
+#[test]
+fn search_reads_titles_and_urls_and_idle_over_reads_the_clock() {
+    let world = World::new();
+    let tabs = vec![
+        with(
+            tab(1, "https://a.test/needle"),
+            "lastAccessed",
+            hours_ago(1.0),
+        ),
+        with(tab(2, "https://b.test/"), "title", json!("A NEEDLE here")),
+        with(tab(3, "https://c.test/"), "lastAccessed", hours_ago(1.0)),
+    ];
+    let _profile = world.profile(INSTANCE_A, obliging(tabs));
+
+    let found = answer_json(&world.run(&["list", "--search", "needle"]));
+    assert_eq!(found["total"], 2);
+
+    // Tab 2 still has the ancient default.
+    let idle = answer_json(&world.run(&["list", "--idle-over", "2h"]));
+    assert_eq!(idle["total"], 1);
+    assert_eq!(idle["tabs"][0]["url"], "https://b.test/");
+    assert!(idle["tabs"][0]["idle_ms"].as_u64().expect("an age") > 3_600_000);
+}
+
+#[test]
+fn list_names_the_group_each_tab_is_in() {
+    let world = World::new();
+    let grouped = with(tab(1, URL), "groupId", json!(77));
+    let _profile = world.profile(
+        INSTANCE_A,
+        Box::new(move |request| {
+            json!({"id": request["id"], "ok": true, "result": {
+                "extensionId": "niglgkgdkfompjmcbpldgepicfnjlfnc",
+                "tabs": [grouped.clone(), tab(2, URL)],
+                "groups": [{"id": 77, "windowId": 1, "title": "work", "color": "red", "collapsed": false}],
+            }})
+        }),
+    );
+
+    let answer = answer_json(&world.run(&["list"]));
+
+    assert_eq!(answer["tabs"][0]["group"], "work");
+    assert_eq!(answer["tabs"][1]["group"], Value::Null);
+}
+
+#[test]
+fn the_text_output_says_what_a_person_needs() {
+    let world = World::new();
+    let tabs = vec![
+        with(
+            with(tab(1, URL), "pinned", json!(true)),
+            "lastAccessed",
+            hours_ago(2.5),
+        ),
+        with(
+            with(tab(2, URL), "discarded", json!(true)),
+            "lastAccessed",
+            hours_ago(0.5),
+        ),
+        with(tab(3, URL), "lastAccessed", hours_ago(50.0)),
+    ];
+    let _profile = world.profile(INSTANCE_A, obliging(tabs));
+
+    let output = world
+        .command()
+        .args(["list", "--limit", "2"])
+        .output()
+        .expect("runs");
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("aaaaaaaa: 3 tabs, 1 unloaded"), "{text}");
+    assert!(text.contains("-P--   2h"), "{text}");
+    assert!(
+        text.contains("---D  30m") || text.contains("---D  29m"),
+        "{text}"
+    );
+    assert!(text.contains("title 1"), "{text}");
+    assert!(
+        text.contains("showing 1-2 of 3; next page: --offset 2"),
+        "{text}"
+    );
+    let last = world
+        .command()
+        .args(["list", "--offset", "2"])
+        .output()
+        .expect("runs");
+    assert!(String::from_utf8_lossy(&last.stdout).contains("2d"));
+}
+
+#[test]
+fn a_person_is_told_which_profile_failed_and_what_did_not_happen() {
+    let world = World::new();
+    let _healthy = world.profile(INSTANCE_A, obliging(vec![tab(1, URL), tab(2, URL)]));
+    let refs = refs_of(&world);
+    let gone = refs[1].replacen(":2:", ":99:", 1);
+    let _silent = world.profile(INSTANCE_B, Box::new(|_| Value::Null));
+
+    let output = world
+        .command()
+        .args(["close", &refs[0], &gone])
+        .output()
+        .expect("runs");
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("closed 1 of 2 tabs"), "{text}");
+    assert!(text.contains("refused"), "{text}");
+    assert!(text.contains("gone"), "{text}");
+    assert!(text.contains("undo with: tab-keeper restore"), "{text}");
+    assert!(text.contains("profile bbbbbbbb did not answer"), "{text}");
+}
+
+#[test]
+fn a_leftover_socket_is_reported_once_and_then_removed() {
+    let world = World::new();
+    let path = world.socket_dir().join(format!("{INSTANCE_B}.sock"));
+    drop(std::os::unix::net::UnixListener::bind(&path).expect("bound"));
+    let _healthy = world.profile(INSTANCE_A, obliging(vec![tab(1, URL)]));
+
+    let output = world.run(&["list"]);
+
+    assert_eq!(exit_code(&output), PARTIAL);
+    assert!(
+        answer_json(&output)["failed"][0]["error"]
+            .as_str()
+            .expect("an error")
+            .contains("no longer running")
+    );
+    assert!(!path.exists());
+    assert_eq!(exit_code(&world.run(&["list"])), 0);
+}
+
+#[test]
+fn a_live_socket_that_hangs_up_is_kept_because_its_host_is_still_there() {
+    let world = World::new();
+    let _silent = world.profile(INSTANCE_A, Box::new(|_| Value::Null));
+
+    world.run(&["list"]);
+
+    assert!(
+        world
+            .socket_dir()
+            .join(format!("{INSTANCE_A}.sock"))
+            .exists()
+    );
+}
+
+#[test]
+fn a_socket_directory_others_can_write_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let world = World::new();
+    let _profile = world.profile(INSTANCE_A, obliging(vec![tab(1, URL)]));
+    fs::set_permissions(world.socket_dir(), fs::Permissions::from_mode(0o777)).expect("opened");
+
+    let output = world.run(&["list"]);
+
+    assert_eq!(exit_code(&output), ERROR);
+}
+
+#[test]
+fn a_profile_is_named_by_its_directory_and_answers_to_its_label() {
+    let world = World::new();
+    let browser = world.root.path().join("browser");
+    let settings = browser
+        .join("Profile 3")
+        .join("Local Extension Settings")
+        .join("niglgkgdkfompjmcbpldgepicfnjlfnc");
+    fs::create_dir_all(&settings).expect("settings");
+    fs::write(
+        settings.join("000003.log"),
+        format!("\0instance\0{INSTANCE_A}\0"),
+    )
+    .expect("log");
+    let sleeping = browser
+        .join("Default")
+        .join("Local Extension Settings")
+        .join("niglgkgdkfompjmcbpldgepicfnjlfnc");
+    fs::create_dir_all(sleeping).expect("settings");
+    fs::write(
+        browser.join("Local State"),
+        json!({"profile": {"info_cache": {
+            "Profile 3": {"name": "Work"},
+            "Default": {"name": "Home"},
+        }}})
+        .to_string(),
+    )
+    .expect("local state");
+    let _profile = world.profile(INSTANCE_A, obliging(vec![tab(1, URL)]));
+
+    let output = world
+        .command()
+        .env("TAB_KEEPER_BROWSER_DIRS", &browser)
+        .args(["--json", "list", "--profile", "Work"])
+        .output()
+        .expect("runs");
+
+    assert_eq!(exit_code(&output), 0);
+    let answer = answer_json(&output);
+    assert_eq!(answer["tabs"][0]["profile"], "Profile 3");
+    assert_eq!(answer["profiles"][0]["label"], "Work");
+    assert_eq!(answer["not_connected"], json!(["Home"]));
+}
+
+#[test]
+fn asking_for_a_profile_nobody_knows_says_who_is_connected() {
+    let world = World::new();
+    let _profile = world.profile(INSTANCE_A, obliging(vec![tab(1, URL)]));
+
+    let output = world.run(&["list", "--profile", "nobody"]);
+
+    assert_eq!(exit_code(&output), ERROR);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("connected: aaaaaaaa"));
+}
+
+#[test]
+fn a_new_bookmark_has_to_say_where_when_several_profiles_are_connected() {
+    let world = World::new();
+    let first = world.profile(INSTANCE_A, bookmark_handler(false));
+    let _second = world.profile(INSTANCE_B, bookmark_handler(false));
+
+    let output = world.run(&["bookmark", "add", "--title", "t", "--url", URL]);
+
+    assert_eq!(exit_code(&output), ERROR);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("aaaaaaaa, bbbbbbbb"));
+    assert_eq!(first.requests_for("bookmarks_add"), Vec::<Value>::new());
+}
+
+#[test]
+fn a_bookmark_the_extension_would_not_make_is_not_success() {
+    let world = World::new();
+    let _profile = world.profile(
+        INSTANCE_A,
+        Box::new(|request| {
+            let result = if request["op"] == "list" {
+                support::snapshot(&[])
+            } else {
+                json!({"folderId": null, "results": [{"status": "refused", "reason": "not_openable"}]})
+            };
+            json!({"id": request["id"], "ok": true, "result": result})
+        }),
+    );
+
+    let output = world.run(&[
+        "bookmark",
+        "add",
+        "--title",
+        "t",
+        "--url",
+        "javascript:alert(1)",
+    ]);
+
+    assert_eq!(exit_code(&output), PARTIAL);
+}
+
+#[test]
+fn bookmarks_page_and_say_where_the_next_page_starts() {
+    let world = World::new();
+    let _profile = world.profile(INSTANCE_A, bookmark_handler(false));
+
+    let first = answer_json(&world.run(&["bookmark", "list", "--limit", "1"]));
+    assert_eq!(first["bookmarks"].as_array().expect("page").len(), 1);
+    assert_eq!(first["next_offset"], 1);
+
+    let last = answer_json(&world.run(&["bookmark", "list", "--offset", "1"]));
+    assert_eq!(last["bookmarks"][0]["title"], "a page");
+    assert_eq!(last["next_offset"], Value::Null);
+}
+
+#[test]
+fn saved_records_page_too() {
+    let world = World::new();
+    let _profile = world.profile(INSTANCE_A, obliging(vec![tab(1, URL)]));
+    closed_record(&world);
+    closed_record(&world);
+
+    let first = answer_json(&world.run(&["saved", "--limit", "1"]));
+    assert_eq!(first["records"].as_array().expect("page").len(), 1);
+    assert_eq!(first["total"], 2);
+    assert_eq!(first["next_offset"], 1);
+
+    let last = answer_json(&world.run(&["saved", "--offset", "1"]));
+    assert_eq!(last["next_offset"], Value::Null);
+}
+
+#[test]
+fn a_group_recreated_wrongly_is_reported_even_though_the_tabs_opened() {
+    let world = World::new();
+    let tabs = vec![tab(1, URL)];
+    let _profile = world.profile(
+        INSTANCE_A,
+        Box::new(move |request| {
+            if request["op"] == "restore" {
+                return json!({"id": request["id"], "ok": true, "result": {
+                    "results": [{"position": 0, "status": "done", "id": 7}],
+                    "groupProblems": [{"key": "1", "reason": "no"}],
+                }});
+            }
+            answer_obligingly(request, &tabs)
+        }),
+    );
+    let record = closed_record(&world);
+
+    let output = world.run(&["restore", &record]);
+
+    assert_eq!(exit_code(&output), PARTIAL);
+    assert_eq!(answer_json(&output)["group_problems"][0]["reason"], "no");
+    // The tab did open, so a second restore is still something to ask for.
+    assert_eq!(exit_code(&world.run(&["restore", &record])), ERROR);
+}
+
+#[test]
+fn a_restore_that_opened_nothing_can_simply_be_tried_again() {
+    let world = World::new();
+    let tabs = vec![tab(1, URL)];
+    let _profile = world.profile(
+        INSTANCE_A,
+        Box::new(move |request| {
+            if request["op"] == "restore" {
+                return json!({"id": request["id"], "ok": true, "result": {
+                    "results": [{"position": 0, "status": "failed", "reason": "no"}],
+                    "groupProblems": [],
+                }});
+            }
+            answer_obligingly(request, &tabs)
+        }),
+    );
+    let record = closed_record(&world);
+
+    assert_eq!(exit_code(&world.run(&["restore", &record])), PARTIAL);
+    assert_eq!(exit_code(&world.run(&["restore", &record])), PARTIAL);
+}
+
+#[test]
+fn only_a_window_left_with_nothing_is_reported_closed() {
+    let world = World::new();
+    let in_window = |id, window| {
+        let mut one = tab(id, URL);
+        one["windowId"] = json!(window);
+        one
+    };
+    let tabs = vec![
+        in_window(1, 10),
+        in_window(2, 20),
+        in_window(3, 30),
+        in_window(4, 30),
+    ];
+    let _profile = world.profile(
+        INSTANCE_A,
+        Box::new(move |request| {
+            if request["op"] == "group" {
+                return json!({"id": request["id"], "ok": true, "result": {"groupId": 5, "results": [
+                    {"id": 1, "status": "done", "fromWindowId": 10, "windowId": 10},
+                    {"id": 2, "status": "done", "fromWindowId": 20, "windowId": 10},
+                    {"id": 3, "status": "done", "fromWindowId": 30, "windowId": 10},
+                ]}});
+            }
+            answer_obligingly(request, &tabs)
+        }),
+    );
+    let refs = refs_of(&world);
+
+    let answer = answer_json(&world.run(&["group", &refs[0], &refs[1], &refs[2]]));
+
+    assert_eq!(answer["closed_windows"], json!([20]));
+    assert_eq!(answer["group_id"], 5);
+}
+
+#[test]
+fn a_name_is_found_only_among_saved_groups() {
+    let world = World::new();
+    let _profile = world.profile(INSTANCE_A, bookmark_handler(false));
+    // A removed bookmark's record carries its title as a name.
+    world.run(&["bookmark", "remove", "5"]);
+
+    assert_eq!(exit_code(&world.run(&["group", "open", "a page"])), ERROR);
+    assert_eq!(
+        answer_json(&world.run(&["group", "list"]))["groups"],
+        json!([])
+    );
+}

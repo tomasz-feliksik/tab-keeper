@@ -198,4 +198,18 @@ mod tests {
             assert_eq!(url_host(url).as_deref(), host, "{url}");
         }
     }
+
+    #[test]
+    fn urls_that_differ_anywhere_get_different_references() {
+        let first = TabRef::of("Default", &tab(1, "https://example.com/a"));
+        assert!(first.matches_url("https://example.com/a"));
+        for other in [
+            "https://example.com/b",
+            "https://example.com/",
+            "https://example.org/a",
+            "c",
+        ] {
+            assert!(!first.matches_url(other), "{other}");
+        }
+    }
 }
