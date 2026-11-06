@@ -7,11 +7,10 @@
       ".agents/**"
       "AGENTS.md"
       "CLAUDE.md"
-      # A frozen copy of the prototype, read while porting and deleted after.
-      "reference/**"
       "flake.lock"
       # Written by sops, and rewritten only by sops.
       "extension/signing-key.sops.json"
+      "extension/tab-keeper.crx"
       "Cargo.lock"
     ];
     programs = {

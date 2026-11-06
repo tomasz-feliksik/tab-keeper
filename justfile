@@ -24,7 +24,7 @@ deny:
     cargo deny check
 
 markdownlint:
-    markdownlint-cli2 "**/*.md" "#.beads" "#.agents" "#target" "#.direnv" "#mutants.out*" "#AGENTS.md" "#CLAUDE.md" "#reference"
+    markdownlint-cli2 "**/*.md" "#.beads" "#.agents" "#target" "#.direnv" "#mutants.out*" "#AGENTS.md" "#CLAUDE.md"
 
 lint: fmt-check clippy audit deny markdownlint
 

@@ -2,8 +2,8 @@
 
 Lets people and agents list, close, group and arrange Chrome tabs across every profile.
 
-**Status: not usable yet.** Only the native messaging relay is built. A working prototype of `list` and `discard` is in
-[`reference/prototype/`](./reference/prototype/), and finishing the Rust port is the first milestone.
+**Status: built, and tested on Chromium.** Every command and MCP tool exists and passes against real Chromium, and a
+fresh NixOS VM installs it from this flake. It has not yet been run on branded Chrome on a real machine.
 
 ## Why
 
@@ -17,6 +17,28 @@ Chrome has no tool that does all of this at once:
 tab-keeper is a small browser extension and a local Rust program. The extension can see tab titles and URLs, but it
 cannot read or change page contents. An agent proposes a tidy-up, you approve it, and every tab it closes is saved first
 so it can be restored.
+
+## Installing it
+
+With Nix, on Linux. The extension is installed by a machine-wide Chrome policy, and the command and native host belong
+to each user. Add the flake as an input, then:
+
+```nix
+# NixOS
+imports = [inputs.tab-keeper.nixosModules.default];
+tabKeeper.extension.enable = true;
+
+# Home Manager
+imports = [inputs.tab-keeper.homeModules.default];
+```
+
+Restart Chrome, then run `tab-keeper list`. To use it from an agent, register `tab-keeper mcp` as a stdio MCP server,
+and keep its write and destructive tools behind your harness's permission prompt.
+
+Titles and URLs are written by websites, and tab-keeper hands them to your agent labelled as untrusted data. A page can
+still try to talk an agent into something, and the tab list can hold private URLs. **An agent that has this and a
+network tool could be persuaded to send those URLs somewhere, and nothing in tab-keeper can prevent that.** Keep that
+combination behind prompts you read.
 
 ## Documentation
 
@@ -32,7 +54,9 @@ so it can be restored.
 ```bash
 nix develop --command just fmt     # format
 nix develop --command just check   # lint and test: the CI entry point
-nix flake check                    # builds, Clippy, formatting, Home Manager module
+nix flake check                    # builds, Clippy, formatting, Home Manager module, extension
+nix develop .#e2e --command just e2e   # the guarantees against real Chromium
+just vm-test                       # the whole install on a fresh NixOS VM
 ```
 
 Work is tracked with [beads](https://github.com/gastownhall/beads): run `bd ready` to see what can be done next.

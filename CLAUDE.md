@@ -1,8 +1,7 @@
 # tab-keeper
 
 A Rust program and a Manifest V3 extension that let people and agents list, close, group and arrange Chrome tabs across
-profiles. **Only the relay, `tab-keeper host`, is built:** `list` and `discard` still exist only in the prototype in
-`reference/prototype/`.
+profiles. Everything is built and tested on Chromium; branded Chrome on a real machine has not been verified.
 
 ## Start here
 
@@ -18,7 +17,10 @@ profiles. **Only the relay, `tab-keeper host`, is built:** `list` and `discard` 
 ```bash
 nix develop --command just fmt       # format
 nix develop --command just check     # lint and test: the CI entry point
-nix flake check                      # builds, Clippy, formatting, Home Manager module
+nix flake check                      # builds, Clippy, formatting, Home Manager module, extension
+nix develop .#e2e --command just e2e # the guarantees against real Chromium
+nix develop .#e2e --command just pack  # re-sign the extension after changing it
+just vm-test                         # the whole install on a fresh NixOS VM
 ```
 
 ## Rules for this repository
@@ -36,7 +38,8 @@ nix flake check                      # builds, Clippy, formatting, Home Manager 
 - **No import-from-derivation.** A consumer may evaluate this flake with it disabled and with warnings as errors.
 - **Everything here is public, the tracker too:** `refs/dolt/data` is readable by anyone, so docs and beads carry no
   private paths, private repository names, client or profile names, or another repository's bead ids.
-- **`reference/prototype/` is frozen.** Read it, do not edit it. It is deleted once the port replaces it.
+- **`extension/tab-keeper.crx` follows its source.** After changing an extension file, run
+  `nix develop .#e2e --command just pack`, or `checks.extension` fails. Never replace the signing key.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:cdcea925 -->
 ## Beads Issue Tracker
