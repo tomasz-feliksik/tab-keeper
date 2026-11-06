@@ -8,7 +8,7 @@ V3 extension and a local Rust program, and it never gets access to page contents
 | Repository | `tomasz-feliksik/tab-keeper` on GitHub, public                       |
 | Crate      | `tab-keeper`                                                         |
 | Binary     | `tab-keeper` (`tabs` collides with the ncurses command of that name) |
-| Status     | Design and scaffolding. The prototype is the only working code       |
+| Status     | The relay is built. `list` and `discard` exist only in the prototype |
 
 What each command does is in [`functionality.md`](./functionality.md). What to watch out for is in
 [`things-to-keep-in-mind.md`](./things-to-keep-in-mind.md).

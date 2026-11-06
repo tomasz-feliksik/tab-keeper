@@ -1,7 +1,7 @@
 # Functionality
 
-What tab-keeper does and promises. **All of this is the design and nothing is built yet.** The prototype in
-`reference/prototype/` does `list` and `discard` only. Names and flags may change while a milestone is being built; the
+What tab-keeper does and promises. **This is the design, and of it only `tab-keeper host` is built.** The prototype in
+`reference/prototype/` does `list` and `discard`. Names and flags may change while a milestone is being built; the
 guarantees should not.
 
 ## Addressing a tab
@@ -74,6 +74,19 @@ These are the product. Each one needs a test that fails when the guarantee is br
 1. **The extension enforces the limits.** Protections are checked inside the extension as well, so a faulty or
    impersonated client cannot skip them. Each capability can be switched off there.
 1. **Output is bounded.** Lists are paged and compact by default, so a large browser cannot flood an agent's context.
+
+## The socket protocol
+
+What a client of `tab-keeper host` can rely on. Messages use native messaging's framing, a native-endian `u32` length
+and then JSON, on the socket as well as on Chrome's pipes.
+
+1. Connect to `$XDG_RUNTIME_DIR/tab-keeper/<instance>.sock` and send one JSON object of up to 1 MiB, including the `id`
+   the host adds. The host replaces any `id` the client sent.
+1. Read one frame. It is the extension's answer exactly as sent, or `{"ok": false, "error": "…"}` from the host.
+1. The connection then closes, so each request needs a new connection.
+
+The connection ending without a complete frame means there is no answer. A client has to report that as a failure, along
+with a refused connection, which means a socket left by a host that was killed.
 
 ## Files
 

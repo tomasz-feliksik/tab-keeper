@@ -1,7 +1,8 @@
 # tab-keeper
 
 A Rust program and a Manifest V3 extension that let people and agents list, close, group and arrange Chrome tabs across
-profiles. **Nothing is built yet:** the only working code is the prototype in `reference/prototype/`.
+profiles. **Only the relay, `tab-keeper host`, is built:** `list` and `discard` still exist only in the prototype in
+`reference/prototype/`.
 
 ## Start here
 

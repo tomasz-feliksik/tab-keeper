@@ -19,6 +19,11 @@ Measured on Chrome 156 on Linux, unless noted.
 | Branded Chrome 156 ignores `--load-extension`                                                                  | Tests use Playwright's Chromium, or install through policy                           |
 | `chrome://policy` shows whether a policy was accepted, and a rejected key leaves the file looking fine         | Check a policy there, never by reading the file                                      |
 | `tabs.discard` frees the tab and keeps it in the strip                                                         | **Measured on Playwright's Chromium only.** Listing and dry runs were on real Chrome |
+| A message from host to extension can be 1,048,576 bytes. One byte more makes Chrome close the port             | The host refuses a larger request itself. **Playwright's Chromium only**             |
+| An 8 MiB message from extension to host arrives                                                                | The 64 MiB limit on answers is our own bound. **Playwright's Chromium only**         |
+| Chrome runs a native host with the extension origin as its only argument                                       | A manifest `path` cannot carry `host`, so it needs a wrapper. **Playwright's only**  |
+| Chrome closes the host's stdin when the browser ends, by SIGTERM, SIGINT or SIGKILL, and sends it no signal    | The host cleans up on EOF. A host killed directly leaves its socket behind           |
+| Chrome replaces a lone surrogate in a page title with U+FFFD before the host sees it                           | Answers arrive as valid text, though the relay does not rely on it. **Playwright's** |
 
 ### Not yet checked
 
@@ -99,6 +104,8 @@ Each of these cost real time on the prototype:
 - **Guard against a stale packed extension.** The prototype has a test that fails when the source and the packed `.crx`
   disagree. It is easy to change `background.js` and test the old build.
 - **Check the guard, not only the code.** Each guarantee's test has to be seen failing when the guarantee is removed.
+- **`timeout` signals its whole process group.** Stopping a browser that runs under `timeout` also kills its native host
+  directly, which leaves a stale socket that real browser exits do not leave. Stop the browser itself.
 
 ## Extension signing
 

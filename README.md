@@ -2,8 +2,8 @@
 
 Lets people and agents list, close, group and arrange Chrome tabs across every profile.
 
-**Status: nothing works yet.** This repository holds the Nix setup, the tracker and the design. A working prototype is
-in [`reference/prototype/`](./reference/prototype/), and the Rust port is the first milestone.
+**Status: not usable yet.** Only the native messaging relay is built. A working prototype of `list` and `discard` is in
+[`reference/prototype/`](./reference/prototype/), and finishing the Rust port is the first milestone.
 
 ## Why
 
