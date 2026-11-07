@@ -248,6 +248,7 @@ pub fn list_profiles(env: &Env) -> Result<Report, OpError> {
             "label": p.name.label,
             "tabs": p.snapshot.tabs.len(),
             "groups": p.snapshot.groups.len(),
+            "extension_version": p.snapshot.extension_version,
         })).collect::<Vec<_>>(),
         "failed": gathered.failed,
         "not_connected": gathered.not_connected,
@@ -257,10 +258,14 @@ pub fn list_profiles(env: &Env) -> Result<Report, OpError> {
         .iter()
         .map(|p| {
             format!(
-                "{}: {} tabs, {} groups",
+                "{}: {} tabs, {} groups, extension {}",
                 display::clean(&p.name.name, 80),
                 p.snapshot.tabs.len(),
-                p.snapshot.groups.len()
+                p.snapshot.groups.len(),
+                p.snapshot
+                    .extension_version
+                    .as_deref()
+                    .map_or_else(|| "older than 0.1.1".to_owned(), |v| display::clean(v, 40))
             )
         })
         .collect();

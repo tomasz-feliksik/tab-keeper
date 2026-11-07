@@ -39,6 +39,9 @@ pub struct Group {
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub extension_id: String,
+    /// Absent from extensions older than 0.1.1.
+    #[serde(default)]
+    pub extension_version: Option<String>,
     pub tabs: Vec<Tab>,
     pub groups: Vec<Group>,
 }
