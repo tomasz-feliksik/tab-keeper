@@ -74,5 +74,11 @@ check-tag tag:
       echo "tag $tag does not match the binary, which reports: $reported" >&2
       exit 1
     }
+    # Chrome installs a new package only for a higher version, so the extension's must move too.
+    extension=$(sed -n 's/^ *"version": "\([^"]*\)",$/\1/p' extension/manifest.json)
+    [[ "$tag" == "v$extension" ]] || {
+      echo "tag $tag does not match the extension, whose manifest says: ${extension:-no version}" >&2
+      exit 1
+    }
 
 check: lint test
