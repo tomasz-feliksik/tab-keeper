@@ -47,7 +47,8 @@ window none of them is in, `move --window` the first one there first.
 
 A new release reaches a running Chrome by itself: the extension asks for updates every 10 minutes and reloads into a new
 version as soon as Chrome has it, so no restart is needed. `profiles` shows which version each profile runs. Upgrading
-from 0.1.0, which did neither, takes two Chrome restarts.
+from 0.1.0, which did neither, takes two Chrome restarts with about a minute between them: the first downloads the
+update, the second loads it, and a second restart before the download starts the wait again.
 
 `discard` needs `TabDiscardingExceptions` set in Chrome's policy, even to an empty list, and refuses to run without it.
 That setting belongs to the machine's own configuration, not to this project.

@@ -46,9 +46,11 @@ ExtensionSettings.${inputs.tab-keeper.lib.extensionId} = {
 ```
 
 Then run `tab-keeper list`; a running Chrome picks the policy up without a restart. After an upgrade, the new extension
-is running within about 10 minutes; `tab-keeper profiles` shows the version each profile runs. Coming from 0.1.0,
-restart Chrome twice instead: the first restart downloads the update, the second loads it. If a tool of yours allows
-every policy-installed extension in incognito, exclude this one, or agents will see those tabs. To use it from an agent,
+is running within about 10 minutes; `tab-keeper profiles` shows the version each profile runs. Coming from 0.1.0, quit
+and start Chrome twice instead, with a minute between: the first start downloads the update, which can take most of that
+minute, and the second loads it. The update has arrived once the profile's
+`Extensions/niglgkgdkfompjmcbpldgepicfnjlfnc/` holds a `0.1.1_0` folder. If a tool of yours allows every
+policy-installed extension in incognito, exclude this one, or agents will see those tabs. To use it from an agent,
 register `tab-keeper mcp` as a stdio MCP server, and keep its write and destructive tools behind your harness's
 permission prompt.
 
