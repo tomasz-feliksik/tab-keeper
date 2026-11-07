@@ -56,9 +56,11 @@ There is no daemon, no port and no network listener.
 | Own project, not a fork of an existing bridge                | The blockers are in the design: the transport, the single-extension hub, the missing move operation                                   |
 | Native messaging, not a local port                           | Chrome starts the host and connects it by private pipes, so there is no port for another local user or service to reach               |
 | Rust for the CLI, relay and MCP server; JS for the extension | One MCP process runs per agent session: 27 MB of Python across 43 sessions is about 1.2 GB. A small native binary is the requirement  |
+| No incognito tabs, ever                                      | Incognito promises to leave nothing behind, and tab-keeper saves URLs before closing                                                  |
 | No access to page contents                                   | No `scripting`, `debugger`, `cookies` or host permissions. Tidying needs titles and URLs, and this limits what a tricked agent can do |
 | The agent proposes, the person approves                      | Read tools and write tools are separate, with correct MCP annotations, so the harness's permission prompt becomes the approval        |
 | Save before closing                                          | An agent will sometimes be wrong. Closing is only acceptable if it can be undone                                                      |
+| `rmcp` for the MCP server, not a hand-written layer          | Good libraries over our own code: it tracks the protocol, for about 0.3 MB and 0.7 MB of RSS more per session                         |
 | No `nix-lib`                                                 | It is private, and this flake has to build for others because the repository is public                                                |
 | No import-from-derivation                                    | A consumer may evaluate this flake with it disabled and with warnings as errors                                                       |
 | Browser memory settings stay out of this project             | Memory Saver is a Chrome policy that belongs in the machine's own configuration. tab-keeper only reads its exemption list             |

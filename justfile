@@ -52,6 +52,10 @@ vm-test:
 vm-test-chrome:
     nix build .#vm-test-chrome --print-build-logs
 
+# Upgrading from the previous release on branded Chrome: Chrome must load the new code. Needs KVM.
+vm-test-chrome-upgrade:
+    nix build .#vm-test-chrome-upgrade --print-build-logs
+
 # Against real Chromium. Needs its own shell: nix develop .#e2e --command just e2e
 e2e *args:
     cargo build

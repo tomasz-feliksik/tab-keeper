@@ -39,9 +39,29 @@ async function connect() {
   }
 }
 
+// Chrome holds back an update while the extension is running, and the open port keeps it
+// running for as long as the browser does. Reloading applies it; the alarm reconnects.
+chrome.runtime.onUpdateAvailable.addListener(() => chrome.runtime.reload());
+
+// Chrome does not look for an update when the policy changes, only every few hours or when
+// it starts, so a machine switched to a new release would keep the old code. The update
+// manifest is a local file, so asking often costs nothing. A throttled check waits for the next.
+const UPDATE_CHECK_MS = 10 * 60 * 1000;
+let lastUpdateCheck = Date.now();
+async function checkForUpdate() {
+  if (Date.now() - lastUpdateCheck < UPDATE_CHECK_MS) return;
+  lastUpdateCheck = Date.now();
+  try {
+    await chrome.runtime.requestUpdateCheck();
+  } catch {
+    // Reported again at the next check; there is nobody to tell here.
+  }
+}
+
 // The alarm brings the connection back after the host dies or the worker is evicted.
 chrome.alarms.create("reconnect", { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener(connect);
+chrome.alarms.onAlarm.addListener(checkForUpdate);
 chrome.runtime.onStartup.addListener(connect);
 chrome.runtime.onInstalled.addListener(connect);
 connect();

@@ -72,6 +72,7 @@ async function listTabs(chrome) {
   const [tabs, groups] = await Promise.all([chrome.tabs.query({}), chrome.tabGroups.query({})]);
   return {
     extensionId: chrome.runtime.id,
+    extensionVersion: chrome.runtime.getManifest().version,
     tabs: tabs.map(compactTab),
     groups: groups.map(({ id, title, color, collapsed, windowId }) => ({
       id,

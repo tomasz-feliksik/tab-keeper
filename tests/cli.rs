@@ -1595,6 +1595,37 @@ fn profiles_lists_who_answers_and_fails_when_one_does_not() {
 }
 
 #[test]
+fn profiles_report_the_extension_version_each_profile_runs() {
+    let world = World::new();
+    let _upgraded = world.profile(
+        INSTANCE_A,
+        Box::new(|request| {
+            let mut answer = answer_obligingly(request, &[tab(1, URL)]);
+            answer["result"]["extensionVersion"] = json!("0.1.1");
+            answer
+        }),
+    );
+    // An extension from before 0.1.1 sends no version at all.
+    let _older = world.profile(INSTANCE_B, obliging(vec![tab(2, URL)]));
+
+    let output = world.run(&["profiles"]);
+
+    assert_eq!(exit_code(&output), 0);
+    let mut versions: Vec<Value> = answer_json(&output)["profiles"]
+        .as_array()
+        .expect("profiles")
+        .iter()
+        .map(|p| p["extension_version"].clone())
+        .collect();
+    versions.sort_by_key(Value::is_null);
+    assert_eq!(versions, vec![json!("0.1.1"), Value::Null]);
+    let human = world.command().args(["profiles"]).output().expect("runs");
+    let human = String::from_utf8_lossy(&human.stdout).into_owned();
+    assert!(human.contains("extension 0.1.1"), "{human}");
+    assert!(human.contains("extension older than 0.1.1"), "{human}");
+}
+
+#[test]
 fn every_tab_bookmarked_at_once_is_complete() {
     let world = World::new();
     let tabs = vec![tab(1, URL), tab(2, URL)];
