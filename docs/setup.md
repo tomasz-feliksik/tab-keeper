@@ -113,3 +113,17 @@ nix develop .#e2e --command just pack
 The first pack was bootstrapped once, by generating the key, encrypting it with `sops` under the rule in `.sops.yaml`,
 and putting its public half in the manifest's `key`. That never needs repeating: replacing the key changes the extension
 ID.
+
+## 7. Releasing
+
+One version names the binary and the extension, and `just check-tag` refuses a tag that does not match both.
+
+1. Set the same version in `Cargo.toml` and `extension/manifest.json`, then `cargo update -p tab-keeper`. Chrome
+   installs a new package only for a higher version, so a release that changes the extension without raising it never
+   reaches a running browser.
+1. Re-sign with `nix develop .#e2e --command just pack`, which also writes the later-version package that
+   `just vm-test-chrome-upgrade` upgrades to.
+1. Run `just vm-test-chrome-upgrade` and `just vm-test-chrome`, which CI cannot run.
+1. Merge to `main`, tag `vX.Y.Z` there, and push the tag. CI's `release_check` runs `just check-tag`, and
+   `package_extension` proves the committed package is what the key makes of this source.
+1. `gh release create vX.Y.Z extension/tab-keeper.crx --notes-file <notes>`.

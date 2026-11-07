@@ -1,8 +1,8 @@
 # Functionality
 
 What tab-keeper does and promises. Everything here is built and tested against Chromium, and every kind of command has
-run on branded Chrome in a NixOS VM. It is installed on one real machine, and has not yet seen days of use. Names and
-flags may change before a first release; the guarantees should not.
+run on branded Chrome in a NixOS VM. It is installed on one real machine, and has not yet seen days of use. While the
+version is 0.x, a release may rename commands and flags; the guarantees hold in every release.
 
 ## Addressing a tab
 
