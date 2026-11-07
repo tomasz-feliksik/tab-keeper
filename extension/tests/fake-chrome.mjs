@@ -1,11 +1,15 @@
 // A small, faithful stand-in for the Chrome APIs, including the behaviours measured on
 // Chromium 156 that make these limits necessary: discard works on an active tab,
-// grouping unpins a pinned tab, and a pinned tab keeps its place in front.
+// grouping unpins a pinned tab, a new group not told its window goes to the last-focused
+// one, and a pinned tab keeps its place in front.
 
 export function fakeChrome(initialTabs = []) {
   const tabs = new Map(initialTabs.map((tab, index) => [tab.id, withDefaults(tab, index)]));
   const groups = new Map();
   const windows = new Set([...tabs.values()].map((tab) => tab.windowId));
+  // The newest window has focus, so a test spanning windows tells "first tab's window" from
+  // "focused window" apart unless it says otherwise.
+  const focus = { windowId: Math.max(...windows) };
   const storage = {};
   const calls = [];
   const bookmarks = new Map([["0", { id: "0", title: "", children: [] }]]);
@@ -31,7 +35,7 @@ export function fakeChrome(initialTabs = []) {
 
   return {
     calls,
-    state: { tabs, groups, windows, storage, bookmarks },
+    state: { tabs, groups, windows, focus, storage, bookmarks },
     runtime: { id: "fakeextensionid" },
     storage: {
       local: {
@@ -70,7 +74,7 @@ export function fakeChrome(initialTabs = []) {
         calls.push(["group", tabIds]);
         const id = groupId ?? nextId++;
         if (!groups.has(id)) {
-          const windowId = createProperties?.windowId ?? need(tabIds[0]).windowId;
+          const windowId = createProperties?.windowId ?? focus.windowId;
           groups.set(id, { id, title: "", color: "grey", collapsed: false, windowId });
         }
         for (const tabId of tabIds) {

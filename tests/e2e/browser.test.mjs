@@ -238,6 +238,71 @@ test("grouping across windows reports the move and the window it emptied", async
   assert.equal((await browser.tabs()).find((tab) => tab.url === here).groupId, -1);
 });
 
+/** A window of its own holding these pages, unfocused, once every page has loaded. */
+async function windowWith(browser, urls) {
+  const created = await browser.evaluate(
+    `return await chrome.windows.create({url: ${JSON.stringify(urls)}, focused: false})`,
+  );
+  await eventually("the pages in the new window", async () => {
+    const tabs = await browser.evaluate(`return await chrome.tabs.query({windowId: ${created.id}})`);
+    return tabs.length === urls.length && tabs.every((tab, i) => tab.status === "complete" && tab.url === urls[i]);
+  });
+  return created.id;
+}
+
+/** Another window takes focus, which is where Chrome puts a group it is not told where to put. */
+async function focusElsewhere(browser) {
+  const focused = await browser.evaluate(
+    `const w = await chrome.windows.create({url: "about:blank", focused: true});
+     await chrome.windows.update(w.id, {focused: true});
+     return w.id`,
+  );
+  const lastFocused = await browser.evaluate(`return (await chrome.windows.getLastFocused()).id`);
+  assert.equal(lastFocused, focused, "the arrangement really moved focus");
+  return focused;
+}
+
+const windowTabs = (browser, windowId) =>
+  browser.evaluate(`return (await chrome.tabs.query({windowId: ${windowId}})).map((tab) => tab.url)`);
+
+test("a new group stays in the tabs' own window, not the focused one", async () => {
+  const browser = await world.browser("one").start();
+  const urls = ["w-one", "w-two", "w-three"].map((name) => pages.url(name));
+  const home = await windowWith(browser, [pages.url("w-stays"), ...urls]);
+  const focused = await focusElsewhere(browser);
+  const refs = await Promise.all(urls.map((url) => world.refFor(url)));
+
+  const { status, json } = world.cli("group", ...refs, "--title", "here");
+
+  assert.equal(status, 0, JSON.stringify(json));
+  const group = await browser.evaluate(`return await chrome.tabGroups.get(${json.group_id})`);
+  assert.equal(group.windowId, home, "the group is in the window its tabs were in");
+  for (const result of json.results) assert.equal(result.windowId, home, JSON.stringify(result));
+  assert.deepEqual(await windowTabs(browser, home), [pages.url("w-stays"), ...urls], "the window keeps its tabs");
+  assert.deepEqual(await windowTabs(browser, focused), ["about:blank"], "the focused window gained nothing");
+  assert.deepEqual(json.closed_windows, []);
+});
+
+test("a group across windows goes to the first tab's window, and empties another", async () => {
+  const browser = await world.browser("one").start();
+  const first = pages.url("x-first");
+  const lonely = pages.url("x-lonely");
+  const destination = await windowWith(browser, [first]);
+  const emptied = await windowWith(browser, [lonely]);
+  const focused = await focusElsewhere(browser);
+
+  const { status, json } = world.cli("group", await world.refFor(first), await world.refFor(lonely), "--title", "x");
+
+  assert.equal(status, 0, JSON.stringify(json));
+  for (const result of json.results) assert.equal(result.windowId, destination, JSON.stringify(result));
+  const group = await browser.evaluate(`return await chrome.tabGroups.get(${json.group_id})`);
+  assert.equal(group.windowId, destination);
+  assert.deepEqual(json.closed_windows, [emptied]);
+  const left = await browser.evaluate(`return (await chrome.windows.getAll()).map((w) => w.id)`);
+  assert.ok(!left.includes(emptied), "the window grouping emptied is closed");
+  assert.deepEqual(await windowTabs(browser, focused), ["about:blank"], "the focused window gained nothing");
+});
+
 test("grouping a pinned tab needs saying so, because Chrome silently unpins it", async () => {
   const browser = await world.browser("one").start();
   const url = pages.url("pinned");

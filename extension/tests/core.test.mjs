@@ -316,6 +316,19 @@ describe("group", () => {
     assert.equal(second.groupId, result.groupId);
   });
 
+  test("a new group stays in its tabs' window when another window has focus", async () => {
+    const chrome = fakeChrome([{ id: 1 }, { id: 2 }, { id: 3, windowId: 2 }]);
+    chrome.state.focus.windowId = 2;
+
+    const { result } = await ask(chrome, { op: "group", targets: [target({ id: 1 }), target({ id: 2 })] });
+
+    assert.equal(chrome.state.groups.get(result.groupId).windowId, 1);
+    assert.deepEqual(
+      result.results.map((r) => r.windowId),
+      [1, 1],
+    );
+  });
+
   test("a pinned tab is protected, because grouping would silently unpin it", async () => {
     const chrome = fakeChrome([{ id: 1, pinned: true }, { id: 2 }]);
 

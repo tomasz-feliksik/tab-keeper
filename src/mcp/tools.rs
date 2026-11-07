@@ -196,8 +196,8 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "group_tabs",
         effect: Effect::Write,
-        summary: "Create or extend a tab group. Grouping across windows pulls tabs into one \
-                  and closes a window it empties.",
+        summary: "Create or extend a tab group. A new group goes to the first tab's window; \
+                  tabs from other windows move into it, and a window it empties closes.",
         properties: group_properties,
         required: &["tabs"],
     },

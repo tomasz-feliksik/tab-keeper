@@ -204,8 +204,11 @@ async function moveTabs(chrome, request) {
   return { results: await withFinalPlacement(chrome, results) };
 }
 
-// Grouping a pinned tab silently unpins it, and grouping across windows moves tabs into
-// one window and closes a window it empties. Results report both.
+// A new group goes to the window of the first tab accepted, so the order of the targets
+// chooses it. Chrome would otherwise use the last-focused window and pull every tab out of
+// its own. Extending a group keeps that group's window. Grouping a pinned tab silently
+// unpins it, and grouping across windows moves tabs into one window and closes a window
+// it empties. Results report all of it.
 async function groupTabs(chrome, request) {
   const allow = allowedProtections(request);
   const results = [];
@@ -225,7 +228,9 @@ async function groupTabs(chrome, request) {
   let groupId;
   try {
     groupId = await chrome.tabs.group(
-      request.groupId === undefined ? { tabIds } : { tabIds, groupId: request.groupId },
+      request.groupId === undefined
+        ? { tabIds, createProperties: { windowId: accepted[0].windowId } }
+        : { tabIds, groupId: request.groupId },
     );
     const properties = {};
     if (request.title !== undefined) properties.title = request.title;

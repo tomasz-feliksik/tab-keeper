@@ -41,6 +41,10 @@ reference printed by `list`, of the form `profile:id:urlhash`.
 | 2           | Part of it did not: a profile that did not answer, or a tab refused or failed   |
 | 1           | Nothing was attempted, such as no profile connected or a policy that is missing |
 
+`group` makes a new group in the window of the first tab named, so the order of the references chooses the window, and
+tabs from other windows move into it. Extending a group with `--title` keeps that group's window. To group tabs in a
+window none of them is in, `move --window` the first one there first.
+
 `discard` needs `TabDiscardingExceptions` set in Chrome's policy, even to an empty list, and refuses to run without it.
 That setting belongs to the machine's own configuration, not to this project.
 
