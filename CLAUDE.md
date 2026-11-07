@@ -35,6 +35,8 @@ just vm-test-chrome                  # the same on branded Chrome, with every ki
   data in anything handed to an agent.
 - **An unverified Chrome fact is not a fact.** Measure it and move it to the measured table in
   `docs/things-to-keep-in-mind.md` before depending on it.
+- **Prefer a well-maintained library to a hand-written layer** (owner, 2026-11-07). Hand-roll only what no good
+  library does, and say in the commit which one you rejected.
 - **No `nix-lib`.** It is private, and this flake has to build for others, because the repository is public.
 - **No import-from-derivation.** A consumer may evaluate this flake with it disabled and with warnings as errors.
 - **Everything here is public, the tracker too:** `refs/dolt/data` is readable by anyone, so docs and beads carry no
