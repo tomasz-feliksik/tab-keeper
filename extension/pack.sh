@@ -40,13 +40,29 @@ find "$work/tab-keeper" -exec touch --date=@0 {} +
 
 # A fresh profile keeps the pack from being handed to a running browser. Chromium exits
 # non-zero here even when it succeeds, so the file is what gets checked.
-env -u LD_LIBRARY_PATH "${chromium[0]}" --user-data-dir="$work/profile" --no-first-run --no-sandbox \
-  --headless=new --disable-gpu --disable-crash-reporter --disable-breakpad --pack-extension="$work/tab-keeper" --pack-extension-key="$work/key.pem" \
-  >"$work/pack.log" 2>&1 || true
-[[ -s "$work/tab-keeper.crx" ]] || {
-  echo "Chromium did not write a package:" >&2
-  cat "$work/pack.log" >&2
-  exit 1
+pack() {
+  local source=$1
+  rm -rf "$work/profile"
+  env -u LD_LIBRARY_PATH "${chromium[0]}" --user-data-dir="$work/profile" --no-first-run --no-sandbox \
+    --headless=new --disable-gpu --disable-crash-reporter --disable-breakpad --pack-extension="$source" --pack-extension-key="$work/key.pem" \
+    >"$work/pack.log" 2>&1 || true
+  [[ -s "$source.crx" ]] || {
+    echo "Chromium did not write a package:" >&2
+    cat "$work/pack.log" >&2
+    exit 1
+  }
 }
+
+pack "$work/tab-keeper"
 install -m 644 "$work/tab-keeper.crx" "$here/tab-keeper.crx"
 echo "wrote extension/tab-keeper.crx"
+
+# The same source as a later release, for the upgrade test (modules/vm-test-chrome-upgrade.nix
+# names this version too). Only the version differs.
+cp -r "$work/tab-keeper" "$work/next"
+sed -i 's/"version": "[^"]*"/"version": "99.0.0"/' "$work/next/manifest.json"
+grep -q '"version": "99.0.0"' "$work/next/manifest.json"
+find "$work/next" -exec touch --date=@0 {} +
+pack "$work/next"
+install -m 644 "$work/next.crx" "$here/../tests/vm/tab-keeper-next.crx"
+echo "wrote tests/vm/tab-keeper-next.crx"

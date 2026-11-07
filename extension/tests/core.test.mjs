@@ -117,6 +117,7 @@ describe("list", () => {
     assert.equal(result.tabs[0].title, "A");
     assert.equal(result.tabs[0].secret, undefined);
     assert.deepEqual(result.groups, [{ id: 5, title: "G", color: "red", collapsed: false, windowId: 1 }]);
+    assert.equal(result.extensionVersion, "9.9.9", "which version answers, so an upgrade can be checked");
   });
 });
 

@@ -22,6 +22,7 @@ nix develop .#e2e --command just e2e # the guarantees against real Chromium
 nix develop .#e2e --command just pack  # re-sign the extension after changing it
 just vm-test                         # the whole install on a fresh NixOS VM
 just vm-test-chrome                  # the same on branded Chrome, with every kind of command
+just vm-test-chrome-upgrade          # an upgrade reaches a running branded Chrome
 ```
 
 ## Rules for this repository

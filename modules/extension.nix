@@ -16,7 +16,7 @@
     ...
   }: let
     cfg = config.tabKeeper.extension;
-    package = self.packages.${pkgs.stdenv.hostPlatform.system}.extension;
+    package = cfg.package;
     # `normal_installed` lets a person disable nothing and remove nothing, and
     # `override_update_url` is what lets a file:// manifest stand in for the Web Store.
     policy = builtins.toJSON {
@@ -35,6 +35,15 @@
 
     options.tabKeeper.extension = {
       enable = lib.mkEnableOption "installing the tab-keeper extension through Chrome policy";
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = self.packages.${pkgs.stdenv.hostPlatform.system}.extension;
+        defaultText = lib.literalExpression "tab-keeper.packages.\${system}.extension";
+        description = ''
+          The signed package and its `updates.xml`. Chrome installs a new package only when
+          `updates.xml` offers a higher version than the installed one.
+        '';
+      };
       policyDirectories = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = ["opt/chrome/policies/managed" "chromium/policies/managed"];

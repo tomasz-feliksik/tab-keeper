@@ -36,7 +36,7 @@ export function fakeChrome(initialTabs = []) {
   return {
     calls,
     state: { tabs, groups, windows, focus, storage, bookmarks },
-    runtime: { id: "fakeextensionid" },
+    runtime: { id: "fakeextensionid", getManifest: () => ({ version: "9.9.9" }) },
     storage: {
       local: {
         get: async (key) => (key in storage ? { [key]: storage[key] } : {}),

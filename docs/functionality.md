@@ -18,7 +18,7 @@ Discarding can give a tab a new ID, as branded Chrome does. `discard` therefore 
 | Command                                                 | What it does                                                |
 | ------------------------------------------------------- | ----------------------------------------------------------- |
 | `tab-keeper list [--profile P] [--host H] [--search S]` | Every tab in every running profile, with paging and filters |
-| `tab-keeper profiles`                                   | Connected profiles, and those known but not connected       |
+| `tab-keeper profiles`                                   | Each profile, connected or not, and its extension version   |
 | `tab-keeper discard --idle 2h [--dry-run]`              | Unload idle tabs to free memory; they stay in the tab strip |
 | `tab-keeper discard <tabs>`                             | Unload these tabs                                           |
 | `tab-keeper close <tabs> [--allow pinned]`              | Save the tabs, then close them                              |
@@ -44,6 +44,10 @@ reference printed by `list`, of the form `profile:id:urlhash`.
 `group` makes a new group in the window of the first tab named, so the order of the references chooses the window, and
 tabs from other windows move into it. Extending a group with `--title` keeps that group's window. To group tabs in a
 window none of them is in, `move --window` the first one there first.
+
+A new release reaches a running Chrome by itself: the extension asks for updates every 10 minutes and reloads into a new
+version as soon as Chrome has it, so no restart is needed. `profiles` shows which version each profile runs. Upgrading
+from 0.1.0, which did neither, takes two Chrome restarts.
 
 `discard` needs `TabDiscardingExceptions` set in Chrome's policy, even to an empty list, and refuses to run without it.
 That setting belongs to the machine's own configuration, not to this project.
