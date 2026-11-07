@@ -41,6 +41,26 @@ default.
 
 Git pushes do not carry the tracker, so finishing a session takes two pushes: `bd dolt push` and `git push`.
 
+### From a fresh clone
+
+A clone has `.beads/` but no database: the issues live in `refs/dolt/data`, which `git clone` does not fetch. Do not run
+the `bd init` above in it. Against an existing tracker it rewrites `AGENTS.md`, `CLAUDE.md`, `.claude/` and `.codex/`
+and commits them. Fetch the database instead:
+
+```bash
+git clone git@github.com:tomasz-feliksik/tab-keeper.git ~/code/projects/tab-keeper
+cd ~/code/projects/tab-keeper
+bd bootstrap                      # downloads refs/dolt/data and adds the `origin` Dolt remote
+git restore .beads/config.yaml    # bootstrap rewrites sync.remote to the git+https form; keep the committed one
+chmod 700 .beads
+git config beads.role maintainer
+bd hooks install
+```
+
+Check it before relying on it. `bd stats` shows the same issue count as another clone, `bd dolt remote list` shows
+`origin`, and `git status --porcelain` is empty. Measured with `bd` 1.3.0. On 1.2.2, `bootstrap` skipped the download
+and reported that the database already existed.
+
 ## 3. The structure
 
 | Path                         | What it is                                                                                                                       |
