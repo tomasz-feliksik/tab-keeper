@@ -42,6 +42,12 @@ just vm-test-chrome-upgrade          # an upgrade reaches a running branded Chro
 - **No import-from-derivation.** A consumer may evaluate this flake with it disabled and with warnings as errors.
 - **Everything here is public, the tracker too:** `refs/dolt/data` is readable by anyone, so docs and beads carry no
   private paths, private repository names, client or profile names, or another repository's bead ids.
+- **No personal data in the repository or the tracker.** tab-keeper reads its owner's real browser, so everything
+  learned from it stays out of commits, docs, test fixtures and beads: tab titles, URLs, hosts, group names, bookmarks,
+  saved records and anything else that shows what someone browses. Describe a measurement on a real machine without
+  that data ("three groups closed through `close_tabs`", "a profile with about 100 tabs"). Dumps and inventories of real
+  browser data go in the session's scratchpad, never in the working tree. Fixtures use invented data, like
+  `example.com`.
 - **`extension/tab-keeper.crx` follows its source.** After changing an extension file, run
   `nix develop .#e2e --command just pack`, or `checks.extension` fails. Never replace the signing key.
 
