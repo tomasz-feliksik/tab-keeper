@@ -227,7 +227,10 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "close_tabs",
         effect: Effect::Destructive,
-        summary: "Save tabs, then close them. Page state and form contents are lost.",
+        summary: "Save tabs, then close them. Page state and form contents are lost. \
+                  tab-keeper first shows the person each tab's title and host and closes only \
+                  the tabs they confirm; if they do not, close nothing and do not ask again \
+                  unless they ask.",
         properties: close_properties,
         required: &["tabs"],
     },
@@ -312,7 +315,7 @@ fn text(arguments: &Value, key: &str) -> Option<String> {
     arguments[key].as_str().map(str::to_owned)
 }
 
-fn texts(arguments: &Value, key: &str) -> Vec<String> {
+pub(super) fn texts(arguments: &Value, key: &str) -> Vec<String> {
     arguments[key]
         .as_array()
         .map(|items| {
@@ -374,11 +377,8 @@ pub fn run(
             ops::restore(env, &record, arguments["again"].as_bool().unwrap_or(false))
         })),
         "describe_tabs" => call(ops::describe(env, &texts(arguments, "tabs"))),
-        "close_tabs" => call(ops::close(
-            env,
-            &texts(arguments, "tabs"),
-            &texts(arguments, "allow"),
-        )),
+        // Not here: closing asks the person first, which needs the client, so the
+        // server runs it (src/mcp.rs). Nothing in this table can close without asking.
         "list_bookmarks" => call(ops::list_bookmarks(
             env,
             &ops::BookmarkListOptions {

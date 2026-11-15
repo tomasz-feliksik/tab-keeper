@@ -83,7 +83,8 @@ The expected way of working:
 1. It presents a plan: what it would close, how it would group the rest, and why. Before showing the plan it can call
    `describe_tabs`, so the titles it shows come from Chrome rather than from its memory of the references.
 1. The person changes the plan or approves it.
-1. The agent runs the operations. The harness asks for permission on destructive ones.
+1. The agent runs the operations. The harness asks for permission on destructive ones, and `close_tabs` then asks the
+   person itself which of the tabs to close, showing each one's title and host as Chrome has them.
 1. The person can restore anything closed.
 
 ## Guarantees
@@ -108,6 +109,11 @@ These are the product. Each one needs a test that fails when the guarantee is br
 1. **The extension enforces the limits.** Protections are checked inside the extension as well, so a faulty or
    impersonated client cannot skip them. Each capability can be switched off there.
 1. **Output is bounded.** Lists are paged and compact by default, so a large browser cannot flood an agent's context.
+1. **An agent closes only what the person was shown and confirmed.** `close_tabs` asks through MCP form elicitation
+   before anything is saved, offering every tab it would close by title and host, and closes only the tabs the person
+   leaves ticked. A decline, a cancel, an error or ten minutes without an answer close nothing and save nothing. A
+   harness that cannot ask is refused and pointed at `tab-keeper close`, where the person typing the command is the
+   confirmation. What each harness shows is measured in `docs/things-to-keep-in-mind.md`.
 
 ## The socket protocol
 

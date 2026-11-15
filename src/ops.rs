@@ -20,9 +20,10 @@ pub use bookmarks::{
     BookmarkAdd, BookmarkListOptions, add_bookmarks, list_bookmarks, remove_bookmark,
     restore_bookmark,
 };
-pub use closing::{close, list_saved, restore};
+pub use closing::{ClosePlan, Offer, close, list_saved, plan_close, restore};
 pub use discarding::{DiscardOptions, discard, parse_duration_ms};
 pub use listing::{ListOptions, describe, list, list_groups, list_profiles};
+pub use results::TabResult;
 pub use saved_groups::{delete_group, list_groups_saved, open_group, save_group};
 
 use crate::client::AskError;
