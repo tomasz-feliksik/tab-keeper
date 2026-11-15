@@ -1,11 +1,15 @@
 # Upgrading the extension on branded Chrome, the way a machine gets a new tab-keeper: a
 # system switch changes the policy's package, and Chrome has to end up running the new
-# code. Three machines, each asking the running extension which version answers:
+# code. An upgrade is run by the code upgraded from, whose update listener decides whether
+# the new version loads without a restart. Three machines, each upgrading to this source
+# as a later version and asking the running extension which version answers:
 #
-#   released  0.1.0 as released, to this release, restarting Chrome as often as it takes
-#   restart   this release to a later one, restarting Chrome once
-#   periodic  this release to a later one, never restarting
+#   previous  the last published release, never restarting: the upgrade people make now
+#   restart   this source, restarting Chrome once
+#   periodic  this source, never restarting
 #
+# The target is always the later version, because between releases this source carries the
+# last release's version, and Chrome installs only a higher one.
 # Unfree, x86_64 only and minutes long, so a package to run on purpose (`just vm-test-chrome-upgrade`).
 {
   self,
@@ -41,8 +45,10 @@
         </gupdate>
         XML
       '';
-    # What machines ran before this release: 0.1.0 exactly as released.
-    released = signed "0.1.0" ../tests/vm/tab-keeper-0.1.0.crx;
+    # The last published release, byte for byte: signing is deterministic, so the tag's
+    # extension/tab-keeper.crx is the published package. The release skill moves this.
+    previousVersion = "0.2.0";
+    previous = signed previousVersion (../tests/vm + "/tab-keeper-${previousVersion}.crx");
     # This source as a later release, written by `just pack` (extension/pack.sh).
     next = signed "99.0.0" ../tests/vm/tab-keeper-next.crx;
 
@@ -81,7 +87,7 @@
         skipTypeCheck = true;
         globalTimeout = 1800;
         nodes = {
-          released = machine released self'.packages.extension;
+          previous = machine previous next;
           restart = machine self'.packages.extension next;
           periodic = machine self'.packages.extension next;
         };
@@ -92,6 +98,7 @@
           PROFILE = "/home/person/.config/google-chrome/Default"
           CURRENT = "${current}"
           NEXT = "99.0.0"
+          PREVIOUS = "${previousVersion}"
 
           def as_person(command):
               return "su person -c " + shlex.quote(ENVIRONMENT + command)
@@ -109,7 +116,7 @@
               m.wait_until_fails("pgrep -u person chrome", timeout=60)
 
           def running(m):
-              """The version the running extension reports, None if it is older than 0.1.1."""
+              """The version the running extension reports, or "unreachable"."""
               status, output = m.execute(as_person("tab-keeper --json profiles"))
               if status != 0:
                   return "unreachable"
@@ -140,30 +147,28 @@
               start_chrome(m, flags)
 
           def switch(m):
-              node = {"released": "${nodes.released.system.build.toplevel}",
+              node = {"previous": "${nodes.previous.system.build.toplevel}",
                       "restart": "${nodes.restart.system.build.toplevel}",
                       "periodic": "${nodes.periodic.system.build.toplevel}"}[m.name]
               m.succeed(f"{node}/specialisation/upgraded/bin/switch-to-configuration test")
 
-          def released_upgrade():
-              m = released
-              prepare(m)
-              assert running(m) is None, "0.1.0 reports no version"
-              switch(m)
-              # Chrome does not look for an update when the policy changes.
-              assert wait_for_version(m, CURRENT, 120) is None, "measured table is stale: Chrome now updates on a policy change"
-              report(m, "two minutes after the switch, no restart:")
-              # 0.1.0 has no onUpdateAvailable listener, so Chrome downloads the update on
-              # the first restart and holds it back while the extension runs.
-              for attempt in (1, 2):
-                  stop_chrome(m)
-                  start_chrome(m)
-                  took = wait_for_version(m, CURRENT, 120)
-                  report(m, f"restart {attempt}, {took} s:")
+          def wait_without_restart(m):
+              # Chrome itself looks only every few hours (--extensions-update-frequency did
+              # nothing in 10 minutes); the extension asks every 10 minutes.
+              took = None
+              for minute in range(15):
+                  took = wait_for_version(m, NEXT, 60)
+                  report(m, f"no restart, minute {minute + 1}:")
                   if took is not None:
                       break
-              assert running(m) == CURRENT, "the new release runs after at most two restarts"
-              print("RELEASED needed", attempt, "restarts")
+              return took
+
+          def previous_upgrade():
+              m = previous
+              prepare(m)
+              assert running(m) == PREVIOUS, f"the fixture is not {PREVIOUS}: {running(m)}"
+              switch(m)
+              assert wait_without_restart(m) is not None, "the last release applies an update without a restart"
 
           def restart_upgrade():
               m = restart
@@ -178,20 +183,12 @@
 
           def periodic_upgrade():
               m = periodic
-              # Chrome itself looks only every few hours (--extensions-update-frequency did
-              # nothing in 10 minutes); the extension asks every 10 minutes.
               prepare(m)
               assert running(m) == CURRENT, running(m)
               switch(m)
-              took = None
-              for minute in range(15):
-                  took = wait_for_version(m, NEXT, 60)
-                  report(m, f"no restart, minute {minute + 1}:")
-                  if took is not None:
-                      break
-              assert took is not None, "this release applies an update without a restart"
+              assert wait_without_restart(m) is not None, "this release applies an update without a restart"
 
-          print("VERSION", released.succeed("google-chrome-stable --version").strip())
+          print("VERSION", previous.succeed("google-chrome-stable --version").strip())
           # The machines run side by side. The driver's subtest() is not thread-safe, so each
           # scenario reports for itself.
           start_all()
@@ -204,9 +201,9 @@
                   print("FAILED", name, repr(error))
                   failures.append(f"{name}: {error!r}")
           threads = [
-              threading.Thread(target=run, args=("0.1.0 to this release", released_upgrade)),
-              threading.Thread(target=run, args=("this release to the next, one restart", restart_upgrade)),
-              threading.Thread(target=run, args=("this release to the next, no restart", periodic_upgrade)),
+              threading.Thread(target=run, args=("the last release to this source, no restart", previous_upgrade)),
+              threading.Thread(target=run, args=("this source to a later version, one restart", restart_upgrade)),
+              threading.Thread(target=run, args=("this source to a later version, no restart", periodic_upgrade)),
           ]
           for thread in threads:
               thread.start()

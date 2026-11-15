@@ -80,6 +80,10 @@ File a bead for the release (`Release tab-keeper X.Y.Z`) and work on a branch na
 1. Re-sign: `nix develop .#e2e --command just pack`. It needs an age identity the signing key is encrypted to, and
    writes `extension/tab-keeper.crx` and `tests/vm/tab-keeper-next.crx`. Never replace
    `extension/signing-key.sops.json`: a new key is a new extension ID.
+1. Point the upgrade test at LAST, the release this one replaces, if it is not there already:
+   `git show LAST:extension/tab-keeper.crx > tests/vm/tab-keeper-LAST_VERSION.crx`, `git rm` the older fixture, and set
+   `previousVersion` in `modules/vm-test-chrome-upgrade.nix`. The tag holds the published package byte for byte, because
+   signing is deterministic.
 1. `nix develop --command just check-tag vX.Y.Z`, the same check CI runs on the tag.
 1. Gates, each judged by its exit status (`cmd >log 2>&1; rc=$?`), never by a pipeline's last stage:
 
@@ -95,9 +99,10 @@ File a bead for the release (`Release tab-keeper X.Y.Z`) and work on a branch na
    The three VM tests need KVM on x86_64 and take minutes each; CI cannot run them, so a release is where they run.
    Record each one's result on the release's bead.
 
-1. Commit the version files, `Cargo.lock` and both packages together as `chore(<id>): release tab-keeper X.Y.Z`. One
-   commit goes onto `main` by fast-forward; a branch that also carries other work is merged with `--no-ff`. The tag goes
-   on the commit `main` then points at, after the person agrees to the change reaching `main`.
+1. Commit the version files, `Cargo.lock`, both packages and any fixture move together as
+   `chore(<id>): release tab-keeper X.Y.Z`. One commit goes onto `main` by fast-forward; a branch that also carries
+   other work is merged with `--no-ff`. The tag goes on the commit `main` then points at, after the person agrees to the
+   change reaching `main`.
 
 ## Phase 5 — Notes
 
@@ -141,10 +146,10 @@ Close the release's bead with the release URL, and report the version, the URL a
 
 - **Commit `Cargo.lock` with the version.** `check-tag` reads the binary through `cargo run`, which quietly rewrites the
   lock on disk, so the check passes locally while the Nix build reads the committed lock.
-- **The upgrade test's "released" machine starts from 0.1.0**, kept as `tests/vm/tab-keeper-0.1.0.crx`, not from the
-  last release. That still proves the oldest install upgrades, and its other two machines prove this release updates to
-  a later one. If the extension's update code changed since the last release, also test from the last release's own
-  package, which is attached to its GitHub release.
+- **An upgrade is run by the code upgraded from.** The upgrade test's `previous` machine runs the last release's
+  published package, which is the upgrade people make with this release; `restart` and `periodic` run this source, which
+  is the upgrade they will make with the next. All three upgrade to this source as 99.0.0, because between releases the
+  source carries the last release's version, and Chrome installs only a higher one.
 - **A red `package_extension` on the tag** means the committed `.crx` is not what the key makes of the tagged source: an
   extension file changed after `just pack`. Re-pack, commit, and tag again before anything is published; a tag nobody
   has published from can still be deleted and recreated.

@@ -123,6 +123,8 @@ One version names the binary and the extension, and `just check-tag` refuses a t
    reaches a running browser.
 1. Re-sign with `nix develop .#e2e --command just pack`, which also writes the later-version package that
    `just vm-test-chrome-upgrade` upgrades to.
+1. Point that test's `previousVersion` and its `tests/vm/` fixture at the release this one replaces, copied from its tag
+   with `git show vX.Y.Z:extension/tab-keeper.crx`.
 1. Run `just vm-test-chrome-upgrade` and `just vm-test-chrome`, which CI cannot run.
 1. Merge to `main`, tag `vX.Y.Z` there, and push the tag. CI's `release_check` runs `just check-tag`, and
    `package_extension` proves the committed package is what the key makes of this source.
