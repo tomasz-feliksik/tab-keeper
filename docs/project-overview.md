@@ -60,7 +60,7 @@ There is no daemon, no port and no network listener.
 | No access to page contents                                   | No `scripting`, `debugger`, `cookies` or host permissions. Tidying needs titles and URLs, and this limits what a tricked agent can do |
 | The agent proposes, the person approves                      | Read tools and write tools are separate, with correct MCP annotations, so the harness's permission prompt becomes the approval        |
 | Save before closing                                          | An agent will sometimes be wrong. Closing is only acceptable if it can be undone                                                      |
-| `rmcp` for the MCP server, not a hand-written layer          | Good libraries over our own code: it tracks the protocol, for about 0.3 MB and 0.7 MB of RSS more per session                         |
+| `rmcp` for the MCP server, not a hand-written layer          | Good libraries over our own code: it tracks the protocol. Measured 2026-11-15: 2.1 MB more binary and 1.9 MB more RSS per session     |
 | No `nix-lib`                                                 | It is private, and this flake has to build for others because the repository is public                                                |
 | No import-from-derivation                                    | A consumer may evaluate this flake with it disabled and with warnings as errors                                                       |
 | Browser memory settings stay out of this project             | Memory Saver is a Chrome policy that belongs in the machine's own configuration. tab-keeper only reads its exemption list             |

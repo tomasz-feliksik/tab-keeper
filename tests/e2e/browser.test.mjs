@@ -401,7 +401,11 @@ test("a page titled as an instruction reaches the agent as data and changes noth
   const count = (await browser.tabs()).length;
 
   const [initialize, tools, listed] = world.mcp(
-    { id: 1, method: "initialize", params: { protocolVersion: "2025-11-25" } },
+    {
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "e2e", version: "0" } },
+    },
     { id: 2, method: "tools/list" },
     { id: 3, method: "tools/call", params: { name: "list_tabs", arguments: {} } },
   );

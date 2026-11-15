@@ -448,8 +448,8 @@ fn serve_mcp(timeout: Duration, policy_dirs: Vec<PathBuf>) -> ExitCode {
         .map_err(|error| Box::new(error) as Box<dyn Error>)
         .and_then(|env| {
             mcp::Server { env, policy_dirs }
-                .serve(std::io::stdin().lock(), std::io::stdout().lock())
-                .map_err(Into::into)
+                .serve()
+                .map_err(|error| error as Box<dyn Error>)
         });
     match served {
         Ok(()) => ExitCode::SUCCESS,

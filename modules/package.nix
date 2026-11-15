@@ -17,7 +17,16 @@
       "rustfmt"
     ];
     craneLib = (inputs.crane.mkLib pkgs).overrideToolchain toolchain;
-    src = craneLib.cleanCargoSource ../.;
+    # The Rust sources, plus the snapshot tests/mcp.rs compares tools/list against: the
+    # package's checkPhase runs the tests, so a fixture outside this set fails there. It
+    # changes only with the tool table, which rebuilds the package anyway.
+    src = pkgs.lib.fileset.toSource {
+      root = ../.;
+      fileset = pkgs.lib.fileset.unions [
+        (craneLib.fileset.commonCargoSources ../.)
+        ../tests/fixtures
+      ];
+    };
     commonArgs = {
       inherit src;
       strictDeps = true;
