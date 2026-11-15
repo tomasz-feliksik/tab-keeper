@@ -52,7 +52,8 @@ minute, and the second loads it. The update has arrived once the profile's
 `Extensions/niglgkgdkfompjmcbpldgepicfnjlfnc/` holds a `0.1.1_0` folder. If a tool of yours allows every
 policy-installed extension in incognito, exclude this one, or agents will see those tabs. To use it from an agent,
 register `tab-keeper mcp` as a stdio MCP server, and keep its write and destructive tools behind your harness's
-permission prompt.
+permission prompt. Before `close_tabs` closes anything, tab-keeper asks you itself, listing each tab's title; a harness
+that cannot ask (agy, for one) closes nothing through it, and you close with `tab-keeper close` instead.
 
 Titles and URLs are written by websites, and tab-keeper hands them to your agent labelled as untrusted data. A page can
 still try to talk an agent into something, and the tab list can hold private URLs. **An agent that has this and a

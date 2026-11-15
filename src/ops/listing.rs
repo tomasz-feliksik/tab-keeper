@@ -3,8 +3,8 @@
 use serde::Serialize;
 use serde_json::json;
 
-use super::gather::{Gathered, LiveProfile, gather};
-use super::results::failed_profile_lines;
+use super::gather::{Gathered, LiveProfile, gather, parse_refs};
+use super::results::{TabResult, failed_profile_lines, resolve};
 use super::{Env, OpError, Report};
 use crate::display::{self, compact};
 use crate::tabs::{NO_GROUP, Tab, TabRef, url_host};
@@ -13,6 +13,8 @@ pub const DEFAULT_LIMIT: usize = 50;
 pub const MAX_LIMIT: usize = 1000;
 pub const TITLE_CHARS: usize = 120;
 pub const URL_CHARS: usize = 200;
+/// As many references as a page of `list_tabs` holds, so a description stays bounded.
+pub const MAX_DESCRIBE: usize = 200;
 const HUMAN_TITLE_CHARS: usize = 70;
 
 #[derive(Clone, Debug, Default)]
@@ -321,5 +323,63 @@ pub fn list_groups(env: &Env, profile: Option<&str>) -> Result<Report, OpError> 
         value: json!({"partial": partial, "failed": gathered.failed, "groups": groups}),
         human: lines.join("\n"),
         complete: !partial,
+    })
+}
+
+/// What each reference names right now, as `list` would show it, in the order asked. A
+/// reference is accepted or refused exactly as `close` would, so what this describes is
+/// what an operation on the same references would act on. It sends nothing but the
+/// listing every read makes.
+pub fn describe(env: &Env, refs: &[String]) -> Result<Report, OpError> {
+    if refs.is_empty() || refs.len() > MAX_DESCRIBE {
+        return Err(OpError::Usage(format!(
+            "give 1 to {MAX_DESCRIBE} references, not {}",
+            refs.len()
+        )));
+    }
+    let refs = parse_refs(refs)?;
+    let gathered = gather(env)?;
+    let mut described = Vec::new();
+    let mut refused: Vec<TabResult> = Vec::new();
+    for reference in &refs {
+        let resolved = resolve(std::slice::from_ref(reference), &gathered);
+        refused.extend(resolved.refused);
+        for (profile, tabs) in resolved.accepted {
+            described.extend(
+                tabs.iter()
+                    .map(|tab| entry(profile, tab, false, env.now_ms)),
+            );
+        }
+    }
+    let partial = !gathered.failed.is_empty();
+    let mut lines: Vec<String> = described
+        .iter()
+        .map(|tab| {
+            format!(
+                "  {} {:>4}  {}  {}",
+                format_flags(tab),
+                format_idle(tab.idle_ms),
+                display::clean(&tab.reference, 120),
+                display::clean(&tab.title, HUMAN_TITLE_CHARS),
+            )
+        })
+        .collect();
+    lines.extend(refused.iter().map(|result| {
+        format!(
+            "  refused {}: {}",
+            display::clean(&result.reference, 120),
+            result.reason.as_deref().unwrap_or("unknown"),
+        )
+    }));
+    lines.extend(failed_profile_lines(&gathered));
+    Ok(Report {
+        complete: !partial && refused.is_empty(),
+        value: json!({
+            "partial": partial,
+            "failed": gathered.failed,
+            "tabs": described,
+            "refused": refused,
+        }),
+        human: lines.join("\n"),
     })
 }

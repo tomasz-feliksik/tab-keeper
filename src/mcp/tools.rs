@@ -180,6 +180,15 @@ const TOOLS: &[Tool] = &[
         required: &[],
     },
     Tool {
+        name: "describe_tabs",
+        effect: Effect::Read,
+        summary: "What tab references name right now: title, URL, window, group and \
+                  protections, read from Chrome, in the order given. Show this to the \
+                  person before acting on the tabs. A stale reference is refused.",
+        properties: tabs_only,
+        required: &["tabs"],
+    },
+    Tool {
         name: "discard_tabs",
         effect: Effect::Write,
         summary: "Unload tabs to free memory; they stay in the tab strip. Give tabs, or idle. Chrome may give an unloaded tab a new ID: use new_ref from the result to act on it afterwards.",
@@ -218,7 +227,10 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "close_tabs",
         effect: Effect::Destructive,
-        summary: "Save tabs, then close them. Page state and form contents are lost.",
+        summary: "Save tabs, then close them. Page state and form contents are lost. \
+                  tab-keeper first shows the person each tab's title and host and closes only \
+                  the tabs they confirm; if they do not, close nothing and do not ask again \
+                  unless they ask.",
         properties: close_properties,
         required: &["tabs"],
     },
@@ -303,7 +315,7 @@ fn text(arguments: &Value, key: &str) -> Option<String> {
     arguments[key].as_str().map(str::to_owned)
 }
 
-fn texts(arguments: &Value, key: &str) -> Vec<String> {
+pub(super) fn texts(arguments: &Value, key: &str) -> Vec<String> {
     arguments[key]
         .as_array()
         .map(|items| {
@@ -364,11 +376,9 @@ pub fn run(
         "restore_saved" => call(required_text(arguments, "record").and_then(|record| {
             ops::restore(env, &record, arguments["again"].as_bool().unwrap_or(false))
         })),
-        "close_tabs" => call(ops::close(
-            env,
-            &texts(arguments, "tabs"),
-            &texts(arguments, "allow"),
-        )),
+        "describe_tabs" => call(ops::describe(env, &texts(arguments, "tabs"))),
+        // Not here: closing asks the person first, which needs the client, so the
+        // server runs it (src/mcp.rs). Nothing in this table can close without asking.
         "list_bookmarks" => call(ops::list_bookmarks(
             env,
             &ops::BookmarkListOptions {

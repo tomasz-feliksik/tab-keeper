@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
 
-use super::gather::{Gathered, LiveProfile, gather, parse_refs};
+use super::gather::{FailedProfile, Gathered, LiveProfile, gather, parse_refs};
 use super::listing::{TITLE_CHARS, URL_CHARS};
 use super::results::{
     TabResult, all_failed, failed_profile_lines, pair_results, resolve, summarize, targets,
@@ -12,7 +12,7 @@ use super::results::{
 use super::{Env, OpError, Report};
 use crate::display::{self, compact};
 use crate::saved::{Record, RecordKind, SavedGroup, SavedTab};
-use crate::tabs::{NO_GROUP, Tab};
+use crate::tabs::{NO_GROUP, Tab, TabRef, url_host};
 
 /// Everything needed to put these tabs back, so far as a tab can be put back.
 pub fn record_for(
@@ -80,6 +80,92 @@ pub fn settle_record(
     record.groups.retain(|group| used.contains(&group.key));
     store.write(&record)?;
     Ok(Some(record.id))
+}
+
+/// A tab a close would offer the person, as Chrome shows it now.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Offer {
+    pub reference: String,
+    pub title: String,
+    pub host: String,
+    pub profile: String,
+    pub window: i64,
+}
+
+/// What a close would do, worked out before anything is saved: the tabs it would offer
+/// the person, and a result for each it would not touch.
+#[derive(Debug)]
+pub struct ClosePlan {
+    pub offered: Vec<Offer>,
+    pub skipped: Vec<TabResult>,
+    pub failed: Vec<FailedProfile>,
+}
+
+/// Reads Chrome and changes nothing.
+///
+/// # Errors
+///
+/// As `close` does, for references, protections and profiles, before anything is read.
+pub fn plan_close(env: &Env, refs: &[String], allow: &[String]) -> Result<ClosePlan, OpError> {
+    if let Some(unknown) = allow
+        .iter()
+        .find(|name| !PROTECTIONS.contains(&name.as_str()))
+    {
+        return Err(OpError::Usage(format!(
+            "{unknown:?} is not a protection; allow may only name active, pinned or audible"
+        )));
+    }
+    let refs = parse_refs(refs)?;
+    if refs.is_empty() {
+        return Err(OpError::Usage("say which tabs to close".to_owned()));
+    }
+    let gathered = gather(env)?;
+    let mut offered: Vec<Offer> = Vec::new();
+    let mut skipped = Vec::new();
+    // One reference at a time, so the person sees the tabs in the order the agent gave.
+    for reference in &refs {
+        let resolved = resolve(std::slice::from_ref(reference), &gathered);
+        skipped.extend(resolved.refused);
+        for (profile, tabs) in resolved.accepted {
+            for tab in tabs {
+                let text = TabRef::of(&profile.name.name, tab).to_string();
+                if offered.iter().any(|o| o.reference == text) {
+                    continue;
+                }
+                // The extension refuses these with the same reasons, so they are not
+                // offered: the person would be asked about tabs that cannot close.
+                if let Some(protection) = protection(tab, allow) {
+                    skipped.push(TabResult::refused(text, protection));
+                    continue;
+                }
+                offered.push(Offer {
+                    reference: text,
+                    title: compact(&tab.title, TITLE_CHARS).0,
+                    host: url_host(&tab.url).unwrap_or_else(|| "no host".to_owned()),
+                    profile: profile.name.name.clone(),
+                    window: tab.window_id,
+                });
+            }
+        }
+    }
+    Ok(ClosePlan {
+        offered,
+        skipped,
+        failed: gathered.failed,
+    })
+}
+
+const PROTECTIONS: [&str; 3] = ["active", "pinned", "audible"];
+
+fn protection(tab: &Tab, allow: &[String]) -> Option<&'static str> {
+    [
+        (tab.active, "active"),
+        (tab.pinned, "pinned"),
+        (tab.audible, "audible"),
+    ]
+    .into_iter()
+    .find(|(on, name)| *on && !allow.iter().any(|a| a == name))
+    .map(|(_, name)| name)
 }
 
 pub fn close(env: &Env, refs: &[String], allow: &[String]) -> Result<Report, OpError> {

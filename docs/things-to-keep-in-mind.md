@@ -94,9 +94,29 @@ expected rather than unlikely:
   leaves the tab open, and "Yes" closes and saves it. `list_tabs` prompts too, so a read-only annotation does not skip
   the question there. The prompt shows the tool's arguments, which are references and not titles, so whoever approves
   has to read the listing above it to know which tab is meant.
+- Let the person see what closes. `close_tabs` asks them itself, through MCP form elicitation, showing each tab's title
+  and host as Chrome has them, so approving a close no longer means approving references. See below for what each
+  harness does with the question.
 - Keep every close undoable.
 - Remember what an attacker gains: the tab list can contain private URLs, so an agent with both this and a network tool
   could be talked into sending them somewhere. Nothing in tab-keeper can prevent that, so document it for users.
+
+### What harnesses do with the question
+
+`close_tabs` sends one form: a message listing every tab, and one multi-select field offering each tab by its title, all
+ticked. Both are needed, because no single layout shows every title in every harness. Measured 2026-11-15 with 30
+invented `example.com` tabs on a stand-in profile, against `tab-keeper mcp` itself:
+
+| Harness             | Shows                                                                                       | Answers                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Claude Code 2.1.325 | The message folded after its first lines, and every title once the field is expanded with → | Accept sends the ticked tabs; unticking keeps a tab open. Decline and Esc close nothing   |
+| Codex 0.169.0       | The whole message with its line breaks removed, and a yes/no: it cannot draw a multi-select | Yes sends an accept with no field, read as every tab offered. Esc closes nothing          |
+| OpenCode 2.2.7      | The whole message and the field, as a list of ticked titles                                 | Submit sends the ticked tabs                                                              |
+| agy 1.5.8           | Nothing. It declares elicitation and answers cancel without showing anything, in every mode | Nothing ever closes through `close_tabs` there. The person closes with `tab-keeper close` |
+
+A harness that declares no form elicitation is refused before anything is read, with the same pointer to the CLI. Only
+an accept closes anything, and only tabs that were offered; a decline, a cancel, an error or ten minutes without an
+answer close nothing and save nothing.
 
 The policy that installs the extension is machine-wide, since Chrome has no per-user policy on Linux. Other OS users get
 the extension too. It does nothing for them unless their account has the native host, because the manifest is per user.
