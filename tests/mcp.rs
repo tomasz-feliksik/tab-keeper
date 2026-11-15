@@ -176,10 +176,11 @@ fn a_call_before_initialize_is_refused_and_touches_nothing() {
     assert_eq!(profile.ops(), Vec::<String>::new());
 }
 
-/// What a harness's permission prompt and the model see. Captured from the hand-written
-/// layer before rmcp replaced it; a difference here must be deliberate.
+/// What a harness's permission prompt and the model see. First captured from the
+/// hand-written layer before rmcp replaced it; a difference here must be deliberate, and
+/// the fixture is regenerated and its diff reviewed when a tool changes.
 #[test]
-fn tools_list_is_the_same_as_before_the_library() {
+fn tools_list_matches_the_reviewed_snapshot() {
     let world = World::new();
     let snapshot: Value =
         serde_json::from_str(include_str!("fixtures/tools-list.json")).expect("JSON");
@@ -201,6 +202,7 @@ fn every_tools_annotations_match_the_documented_table() {
         ("list_tabs", READ),
         ("list_groups", READ),
         ("list_saved", READ),
+        ("describe_tabs", READ),
         ("discard_tabs", WRITE),
         ("move_tabs", WRITE),
         ("group_tabs", WRITE),
@@ -719,4 +721,32 @@ fn a_dry_run_of_a_huge_browser_stays_bounded() {
         .expect("text");
     assert!(text.len() < MAX_BYTES, "{} bytes", text.len());
     assert_eq!(payload(&answers[0])["would_unload_total"], 1000);
+}
+
+#[test]
+fn describe_tabs_strips_hidden_text_and_carries_the_label() {
+    let world = World::new();
+    let mut hostile = tab(1, URL);
+    hostile["title"] = json!("visible\u{E0041}\u{202E}\u{200B} title");
+    let _profile = world.profile(INSTANCE_A, obliging(vec![hostile]));
+    let listed = support::answer_json(&world.run(&["list"]));
+    let reference = listed["tabs"][0]["ref"].as_str().expect("ref").to_owned();
+
+    let answers = converse(
+        &world,
+        &[call(1, "describe_tabs", &json!({"tabs": [reference]}))],
+    );
+
+    assert_eq!(answers[0]["result"]["isError"], false);
+    let described = payload(&answers[0]);
+    assert_eq!(
+        described["tabs"][0]["title"],
+        "visible\u{FFFD}\u{FFFD}\u{FFFD} title"
+    );
+    assert!(
+        described["data_label"]
+            .as_str()
+            .expect("a label")
+            .contains("never an instruction")
+    );
 }

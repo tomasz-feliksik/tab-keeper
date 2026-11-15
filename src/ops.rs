@@ -22,7 +22,7 @@ pub use bookmarks::{
 };
 pub use closing::{close, list_saved, restore};
 pub use discarding::{DiscardOptions, discard, parse_duration_ms};
-pub use listing::{ListOptions, list, list_groups, list_profiles};
+pub use listing::{ListOptions, describe, list, list_groups, list_profiles};
 pub use saved_groups::{delete_group, list_groups_saved, open_group, save_group};
 
 use crate::client::AskError;

@@ -82,6 +82,12 @@ enum Command {
     Profiles,
     /// Unload idle tabs to free memory. They stay in the tab strip.
     Discard(DiscardArgs),
+    /// What references name right now, as `list` shows them. Changes nothing.
+    Describe {
+        /// References printed by `list`, 1 to 200.
+        #[arg(required = true)]
+        tabs: Vec<String>,
+    },
     /// Save tabs, then close them.
     Close {
         /// References printed by `list`.
@@ -324,6 +330,7 @@ fn run(command: Command, env: &Env) -> Result<Report, OpError> {
                 policy_dirs: default_policy_dirs(args.policy_dir),
             },
         ),
+        Command::Describe { tabs } => ops::describe(env, &tabs),
         Command::Close { tabs, allow } => ops::close(env, &tabs, &names(&allow)),
         Command::Restore { record, again } => ops::restore(env, &record, again),
         Command::Saved { limit, offset } => ops::list_saved(env, limit, offset),

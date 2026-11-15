@@ -180,6 +180,15 @@ const TOOLS: &[Tool] = &[
         required: &[],
     },
     Tool {
+        name: "describe_tabs",
+        effect: Effect::Read,
+        summary: "What tab references name right now: title, URL, window, group and \
+                  protections, read from Chrome, in the order given. Show this to the \
+                  person before acting on the tabs. A stale reference is refused.",
+        properties: tabs_only,
+        required: &["tabs"],
+    },
+    Tool {
         name: "discard_tabs",
         effect: Effect::Write,
         summary: "Unload tabs to free memory; they stay in the tab strip. Give tabs, or idle. Chrome may give an unloaded tab a new ID: use new_ref from the result to act on it afterwards.",
@@ -364,6 +373,7 @@ pub fn run(
         "restore_saved" => call(required_text(arguments, "record").and_then(|record| {
             ops::restore(env, &record, arguments["again"].as_bool().unwrap_or(false))
         })),
+        "describe_tabs" => call(ops::describe(env, &texts(arguments, "tabs"))),
         "close_tabs" => call(ops::close(
             env,
             &texts(arguments, "tabs"),

@@ -21,6 +21,7 @@ Discarding can give a tab a new ID, as branded Chrome does. `discard` therefore 
 | `tab-keeper profiles`                                   | Each profile, connected or not, and its extension version   |
 | `tab-keeper discard --idle 2h [--dry-run]`              | Unload idle tabs to free memory; they stay in the tab strip |
 | `tab-keeper discard <tabs>`                             | Unload these tabs                                           |
+| `tab-keeper describe <tabs>`                            | What references name right now, as `list` shows them        |
 | `tab-keeper close <tabs> [--allow pinned]`              | Save the tabs, then close them                              |
 | `tab-keeper restore <record> [--again]`                 | Reopen a saved set in the same profile                      |
 | `tab-keeper saved`                                      | What has been saved                                         |
@@ -62,6 +63,7 @@ to be true, because they are what the permission prompt relies on.
 | ------------------------------------------- | ------------------- |
 | `list_profiles`, `list_tabs`, `list_groups` | read-only           |
 | `list_saved`                                | read-only           |
+| `describe_tabs`                             | read-only           |
 | `discard_tabs`                              | write               |
 | `move_tabs`, `group_tabs`, `ungroup_tabs`   | write               |
 | `restore_saved`                             | write               |
@@ -78,7 +80,8 @@ never read as an empty answer.
 The expected way of working:
 
 1. The agent reads a compact list, one page at a time.
-1. It presents a plan: what it would close, how it would group the rest, and why.
+1. It presents a plan: what it would close, how it would group the rest, and why. Before showing the plan it can call
+   `describe_tabs`, so the titles it shows come from Chrome rather than from its memory of the references.
 1. The person changes the plan or approves it.
 1. The agent runs the operations. The harness asks for permission on destructive ones.
 1. The person can restore anything closed.

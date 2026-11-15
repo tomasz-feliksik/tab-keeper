@@ -1676,3 +1676,110 @@ fn the_saved_list_marks_what_was_already_restored() {
     let after = world.command().args(["saved"]).output().expect("runs");
     assert!(String::from_utf8_lossy(&after.stdout).contains("(restored)"));
 }
+
+#[test]
+fn describe_answers_the_rows_list_gives_in_the_order_asked() {
+    let world = World::new();
+    let _profile = world.profile(
+        INSTANCE_A,
+        obliging(vec![tab(1, URL), tab(2, "https://example.org/other")]),
+    );
+    let listed = answer_json(&world.run(&["list"]))["tabs"].clone();
+    let refs = refs_of(&world);
+
+    let output = world.run(&["describe", &refs[1], &refs[0]]);
+
+    assert_eq!(exit_code(&output), 0);
+    let answer = answer_json(&output);
+    // Idle time is read per run, so it is the one field that may differ.
+    let without_idle = |rows: Vec<Value>| -> Vec<Value> {
+        rows.into_iter()
+            .map(|mut row| {
+                row.as_object_mut().expect("a row").remove("idle_ms");
+                row
+            })
+            .collect()
+    };
+    assert_eq!(
+        without_idle(answer["tabs"].as_array().expect("tabs").clone()),
+        without_idle(vec![listed[1].clone(), listed[0].clone()])
+    );
+    assert_eq!(answer["refused"], json!([]));
+}
+
+#[test]
+fn describe_refuses_each_reference_that_no_longer_names_a_tab() {
+    let world = World::new();
+    let first = world.profile(INSTANCE_A, obliging(vec![tab(1, URL), tab(2, URL)]));
+    let refs = refs_of(&world);
+    drop(first);
+    fs::remove_file(world.socket_dir().join(format!("{INSTANCE_A}.sock"))).expect("removed");
+    let _second = world.profile(
+        INSTANCE_A,
+        obliging(vec![tab(1, "https://example.com/elsewhere"), tab(2, URL)]),
+    );
+    let gone = refs[1].replacen(":2:", ":99:", 1);
+    let elsewhere = format!("nobody{}", &refs[1][8..]);
+
+    let output = world.run(&["describe", &refs[0], &refs[1], &gone, &elsewhere]);
+
+    assert_eq!(exit_code(&output), PARTIAL);
+    let answer = answer_json(&output);
+    let described: Vec<&str> = answer["tabs"]
+        .as_array()
+        .expect("tabs")
+        .iter()
+        .map(|row| row["ref"].as_str().expect("ref"))
+        .collect();
+    assert_eq!(described, [refs[1].as_str()]);
+    let reasons: Vec<(&str, &str)> = answer["refused"]
+        .as_array()
+        .expect("refused")
+        .iter()
+        .map(|r| {
+            (
+                r["ref"].as_str().expect("ref"),
+                r["reason"].as_str().expect("reason"),
+            )
+        })
+        .collect();
+    assert_eq!(
+        reasons,
+        [
+            (refs[0].as_str(), "url_changed"),
+            (gone.as_str(), "gone"),
+            (elsewhere.as_str(), "profile_not_connected"),
+        ]
+    );
+}
+
+#[test]
+fn describing_touches_nothing() {
+    let world = World::new();
+    let profile = world.profile(INSTANCE_A, obliging(vec![tab(1, URL)]));
+    let reference = refs_of(&world).remove(0);
+    let before = profile.ops().len();
+
+    let output = world.run(&["describe", &reference]);
+
+    assert_eq!(exit_code(&output), 0);
+    assert_eq!(profile.ops()[before..], ["list"]);
+}
+
+#[test]
+fn describe_needs_one_to_two_hundred_references() {
+    let world = World::new();
+    let profile = world.profile(INSTANCE_A, obliging(vec![tab(1, URL)]));
+    let reference = refs_of(&world).remove(0);
+    let before = profile.ops().len();
+    let too_many = vec![reference.as_str(); 201];
+
+    let none = world.run(&["describe"]);
+    let mut args = vec!["describe"];
+    args.extend(too_many);
+    let over = world.run(&args);
+
+    assert_ne!(exit_code(&none), 0);
+    assert_eq!(exit_code(&over), ERROR);
+    assert_eq!(profile.ops().len(), before);
+}
